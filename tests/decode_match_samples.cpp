@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
         //...
 
         // Check that all the ffmpeg decoded frames match.
-        for (size_t index_frame = 1; index_frame <= sample_frames[index_sample]; ++index_frame) {
+        for (size_t index_frame = 0; index_frame < sample_frames[index_sample]; ++index_frame) {
             int width = 0;
             int height = 0;
             std::unique_ptr<unsigned char[]> pixels = load_frame(index_sample, index_frame, width, height);

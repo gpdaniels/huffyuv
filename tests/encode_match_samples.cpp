@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
         //...
 
         // Add all the ffmpeg decoded frames.
-        for (size_t index_frame = 1; index_frame <= sample_frames[index_sample]; ++index_frame) {
+        for (size_t index_frame = 0; index_frame < sample_frames[index_sample]; ++index_frame) {
             int width = 0;
             int height = 0;
             std::unique_ptr<unsigned char[]> pixels = load_frame(index_sample, index_frame, width, height);
