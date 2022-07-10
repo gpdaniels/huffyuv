@@ -155,14 +155,8 @@ ENDIF()
 
 # Copy samples to binay dir.
 SET(SAMPLES
-    "angels_480-huffyuvcompress.avi"
     "camera2_hfyu32.avi"
     "camera2_png.avi"
-    "cons-huffyuv.avi"
-    "huffyuv.avi"
-    "huffyuv_sample.avi"
-    "huffyuv_segfault.avi"
-    "monika_huffyuv.avi"
     "rgb24_interlaced.avi"
     "rgb_predgrad.avi"
     "rgb_predleft.avi"
