@@ -1,3 +1,5 @@
+#include <avi.hpp>
+
 #include "samples.hpp"
 
 int main(int argc, char* argv[]) {

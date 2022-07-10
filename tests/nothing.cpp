@@ -1,3 +1,4 @@
+#include <avi.hpp>
 #include <huffyuv.hpp>
 
 int main(int argc, char* argv[]) {

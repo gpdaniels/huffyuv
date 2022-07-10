@@ -188,6 +188,7 @@ INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/source")
 ################################################################################
 
 ADD_EXECUTABLE(nothing
+    "${CMAKE_SOURCE_DIR}/source/avi.hpp"
     "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
     "${CMAKE_SOURCE_DIR}/tests/nothing.cpp"
 )
@@ -195,18 +196,29 @@ ADD_TEST(NAME nothing COMMAND $<TARGET_FILE:nothing>)
 SET_TESTS_PROPERTIES(nothing PROPERTIES TIMEOUT 10)
 
 ADD_EXECUTABLE(validate_samples
+    "${CMAKE_SOURCE_DIR}/source/avi.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
     "${CMAKE_SOURCE_DIR}/tests/validate_samples.cpp"
 )
 ADD_TEST(NAME validate_samples COMMAND $<TARGET_FILE:validate_samples>)
 SET_TESTS_PROPERTIES(validate_samples PROPERTIES TIMEOUT 10)
 
 ADD_EXECUTABLE(encode_match_samples
+    "${CMAKE_SOURCE_DIR}/source/avi.hpp"
+    "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
     "${CMAKE_SOURCE_DIR}/tests/encode_match_samples.cpp"
 )
 ADD_TEST(NAME encode_match_samples COMMAND $<TARGET_FILE:encode_match_samples>)
 SET_TESTS_PROPERTIES(encode_match_samples PROPERTIES TIMEOUT 10)
 
 ADD_EXECUTABLE(decode_match_samples
+    "${CMAKE_SOURCE_DIR}/source/avi.hpp"
+    "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
     "${CMAKE_SOURCE_DIR}/tests/decode_match_samples.cpp"
 )
 ADD_TEST(NAME decode_match_samples COMMAND $<TARGET_FILE:decode_match_samples>)
