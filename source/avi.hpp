@@ -19,6 +19,7 @@ private:
         std::vector<chunk_type> children;
     };
 
+public:
     // The main avi header.
     struct avih_type final {
         // Contains the duration of one video frame in microseconds.
@@ -137,6 +138,7 @@ private:
         strf_auds_type strf_auds;
     };
 
+private:
     struct index_type {
         unsigned int chunk_id;
         // Flags:
@@ -149,8 +151,8 @@ private:
     };
     static_assert(sizeof(index_type) == 16);
 
+public:
     struct frame_type {
-        index_type index;
         std::vector<unsigned char> data;
     };
 
@@ -202,6 +204,31 @@ public:
         return true;
     }
 
+public:
+    const avih_type& get_avih() const {
+        return this->avih;
+    }
+
+    const std::vector<strh_type>& get_strhs() const {
+        return this->strhs;
+    }
+
+    const std::vector<strf_type>& get_strfs() const {
+        return this->strfs;
+    }
+
+    const std::vector<std::vector<frame_type>>& get_frames() const {
+        return this->frames;
+    }
+
+public:
+    constexpr static unsigned int fourcc(const char* data) {
+        return  (static_cast<unsigned int>(data[3]) << 24) |
+                (static_cast<unsigned int>(data[2]) << 16) |
+                (static_cast<unsigned int>(data[1]) <<  8) |
+                (static_cast<unsigned int>(data[0]) <<  0);
+    }
+
 private:
     constexpr static void copy_bytes(const void* source, void* destination, unsigned int length) {
         const unsigned char* data_source = static_cast<const unsigned char*>(source);
@@ -211,13 +238,7 @@ private:
         }
     }
 
-    constexpr static unsigned int fourcc(const char* data) {
-        return  (static_cast<unsigned int>(data[3]) << 24) |
-                (static_cast<unsigned int>(data[2]) << 16) |
-                (static_cast<unsigned int>(data[1]) <<  8) |
-                (static_cast<unsigned int>(data[0]) <<  0);
-    }
-
+private:
     static bool parse_chunks(const unsigned char* data, unsigned int length, chunk_type& chunk) {
         // Extract chunk header data.
         if (length < 8) {
