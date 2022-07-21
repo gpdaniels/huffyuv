@@ -1,4 +1,4 @@
-#include <avi.hpp>
+#include <huffyuv.hpp>
 
 #include "samples.hpp"
 
@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
     for (size_t index_sample = 0; index_sample < sample_names.size(); ++index_sample) {
         int length = 0;
         std::unique_ptr<unsigned char[]> file = load_video(index_sample, length);
-        avi video;
+        huffyuv video;
         if ((file != nullptr) && (length != 0) && (!video.parse(file.get(), length))) {
             fprintf(stderr, "Failed to parse avi of sample '%s'.\n", sample_names[index_sample].c_str());
             return 1;

@@ -196,6 +196,7 @@ SET_TESTS_PROPERTIES(nothing PROPERTIES TIMEOUT 10)
 
 ADD_EXECUTABLE(validate_samples
     "${CMAKE_SOURCE_DIR}/source/avi.hpp"
+    "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
     "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
     "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
     "${CMAKE_SOURCE_DIR}/tests/validate_samples.cpp"
