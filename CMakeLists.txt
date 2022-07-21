@@ -156,7 +156,6 @@ ENDIF()
 # Copy samples to binay dir.
 SET(SAMPLES
     "camera2_hfyu32.avi"
-    "camera2_png.avi"
     "rgb24_interlaced.avi"
     "rgb_predgrad.avi"
     "rgb_predleft.avi"

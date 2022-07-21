@@ -5,9 +5,8 @@
 
 #include "ppm.hpp"
 
-static const std::array<std::string, 11> sample_names {
+static const std::array<std::string, 10> sample_names {
     "camera2_hfyu32.avi",
-    "camera2_png.avi",
     "rgb24_interlaced.avi",
     "rgb_predgrad.avi",
     "rgb_predleft.avi",
@@ -19,8 +18,7 @@ static const std::array<std::string, 11> sample_names {
     "yuv_v1.avi"
 };
 
-static const std::array<size_t, 11> sample_frames {
-    30,
+static const std::array<size_t, 10> sample_frames {
     30,
     2,
     42,
