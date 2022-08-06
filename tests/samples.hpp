@@ -35,7 +35,7 @@ std::unique_ptr<unsigned char[]> load_frame(int index_sample, int index_frame, i
     std::string frame = std::to_string(index_frame);
     frame = std::string(std::max(6 - (int)frame.size(), 0), '0') + frame;
     std::string path = "frames/" + sample_names[index_sample] + "/" + frame + ".ppm";
-    return load_ppm(path, width, height);
+    return ppm_load(path, width, height);
 }
 
 std::unique_ptr<unsigned char[]> load_video(int index_sample, int& length) {
