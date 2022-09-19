@@ -182,6 +182,130 @@ ENDFOREACH()
 
 ################################################################################
 
+SET(BUILD_SANITIZE_ADDRESS OFF CACHE BOOL "Enable building with clang sanitizer flags for address checking.")
+SET(BUILD_SANITIZE_MEMORY OFF CACHE BOOL "Enable building with clang sanitizer flags memory checking.")
+SET(BUILD_SANITIZE_THREAD OFF CACHE BOOL "Enable building with clang sanitizer flags thread checking.")
+SET(BUILD_SANITIZE_UNDEFINED_BEHAVIOR OFF CACHE BOOL "Enable building with clang sanitizer flags for undefined behavior checking.")
+
+# Set clang sanitizer flags.
+IF(BUILD_SANITIZE_ADDRESS OR BUILD_SANITIZE_MEMORY OR BUILD_SANITIZE_THREAD OR BUILD_SANITIZE_UNDEFINED_BEHAVIOR)
+    IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+
+        IF(BUILD_SANITIZE_ADDRESS)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_ADDRESS=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=address")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=address")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_MEMORY)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=memory")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_MEMORY=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=memory")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=memory")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_THREAD)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_THREAD=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=thread")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=thread")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_UNDEFINED_BEHAVIOR)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_UNDEFINED_BEHAVIOR=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=undefined")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=undefined")
+        ENDIF()
+
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+
+    ELSEIF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
+
+        IF(BUILD_SANITIZE_ADDRESS)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_ADDRESS=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=address")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=address")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_MEMORY)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=memory")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_MEMORY=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=memory")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=memory")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_THREAD)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_THREAD=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=thread")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=thread")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_UNDEFINED_BEHAVIOR)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_UNDEFINED_BEHAVIOR=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=undefined")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=undefined")
+        ENDIF()
+
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+
+    ELSEIF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+
+        IF(BUILD_SANITIZE_ADDRESS)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_ADDRESS=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=address")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=address")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_MEMORY)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=memory")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_MEMORY=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=memory")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=memory")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=memory")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_THREAD)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_THREAD=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=thread")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=thread")
+        ENDIF()
+
+        IF(BUILD_SANITIZE_UNDEFINED_BEHAVIOR)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTL_HAS_SANITIZER_UNDEFINED_BEHAVIOR=1")
+            SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+            SET(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=undefined")
+            #SET(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} -fsanitize=undefined")
+        ENDIF()
+
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+
+    ELSEIF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+        MESSAGE(FATAL_ERROR "Unsupported compiler.")
+    ELSE()
+        MESSAGE(FATAL_ERROR "Unsupported compiler.")
+    ENDIF()
+ENDIF()
+
+################################################################################
+
 INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/source")
 
 ################################################################################
@@ -192,37 +316,48 @@ ADD_EXECUTABLE(nothing
     "${CMAKE_SOURCE_DIR}/tests/nothing.cpp"
 )
 ADD_TEST(NAME nothing COMMAND $<TARGET_FILE:nothing>)
-SET_TESTS_PROPERTIES(nothing PROPERTIES TIMEOUT 10)
+SET_TESTS_PROPERTIES(nothing PROPERTIES TIMEOUT 30)
 
 ADD_EXECUTABLE(validate_samples
     "${CMAKE_SOURCE_DIR}/source/avi.hpp"
     "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/convert.hpp"
     "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
     "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
     "${CMAKE_SOURCE_DIR}/tests/validate_samples.cpp"
 )
 ADD_TEST(NAME validate_samples COMMAND $<TARGET_FILE:validate_samples>)
-SET_TESTS_PROPERTIES(validate_samples PROPERTIES TIMEOUT 10)
+SET_TESTS_PROPERTIES(validate_samples PROPERTIES TIMEOUT 30)
+
+ADD_EXECUTABLE(validate_conversion
+    "${CMAKE_SOURCE_DIR}/tests/convert.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/validate_conversion.cpp"
+)
+ADD_TEST(NAME validate_conversion COMMAND $<TARGET_FILE:validate_conversion>)
+SET_TESTS_PROPERTIES(validate_conversion PROPERTIES TIMEOUT 30)
 
 ADD_EXECUTABLE(encode_match_samples
     "${CMAKE_SOURCE_DIR}/source/avi.hpp"
     "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/convert.hpp"
     "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
     "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
     "${CMAKE_SOURCE_DIR}/tests/encode_match_samples.cpp"
 )
 ADD_TEST(NAME encode_match_samples COMMAND $<TARGET_FILE:encode_match_samples>)
-SET_TESTS_PROPERTIES(encode_match_samples PROPERTIES TIMEOUT 10)
+SET_TESTS_PROPERTIES(encode_match_samples PROPERTIES TIMEOUT 30)
 
 ADD_EXECUTABLE(decode_match_samples
     "${CMAKE_SOURCE_DIR}/source/avi.hpp"
     "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/convert.hpp"
     "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
     "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
     "${CMAKE_SOURCE_DIR}/tests/decode_match_samples.cpp"
 )
 ADD_TEST(NAME decode_match_samples COMMAND $<TARGET_FILE:decode_match_samples>)
-SET_TESTS_PROPERTIES(decode_match_samples PROPERTIES TIMEOUT 10)
+SET_TESTS_PROPERTIES(decode_match_samples PROPERTIES TIMEOUT 30)
 
 ################################################################################
 

@@ -130,7 +130,7 @@ public:
     static_assert(sizeof(strf_vids_type) == 40 + sizeof(std::vector<unsigned char>));
 
     struct strf_auds_type {
-        // TODO: ...
+        // TODO: Currently ignoring audio chunks.
     };
     struct strf_type {
         unsigned int identifier;
@@ -164,7 +164,7 @@ private:
     std::vector<std::vector<frame_type>> frames;
 
 public:
-    bool parse(const unsigned char* data, unsigned int length) {
+    bool parse(const unsigned char* data, unsigned long long int length) {
         this->strhs.clear();
         this->strfs.clear();
         this->frames.clear();
@@ -239,7 +239,7 @@ private:
     }
 
 private:
-    static bool parse_chunks(const unsigned char* data, unsigned int length, chunk_type& chunk) {
+    static bool parse_chunks(const unsigned char* data, unsigned long long int length, chunk_type& chunk) {
         // Extract chunk header data.
         if (length < 8) {
             return false;
@@ -266,7 +266,7 @@ private:
                     return false;
                 }
                 index += 8 + child.length + (child.length % 2);
-                chunk.children.push_back(child);
+                chunk.children.push_back(std::move(child));
             }
             return (index == chunk.length);
         }
@@ -432,8 +432,10 @@ private:
                             }
 
                             if (this->strhs.back().type == fourcc("vids")) {
-                                // TODO: Problem, sometimes there is extradata at the end of the struct...
-                                if (strl_child.length < (sizeof(strf_vids_type) - sizeof(std::vector<unsigned char>))) {
+                                // Ensure the strf_vids_type is the expected size (40), given that we've added an extradata member into it.
+                                static_assert((sizeof(strf_vids_type) - sizeof(decltype(strf_vids_type::extradata))) == 40);
+
+                                if (strl_child.length < 40) {
                                     std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strf' chunk is not the correct size.\n");
                                     return false;
                                 }
@@ -451,7 +453,7 @@ private:
                                 copy_bytes(&strl_child.data[32], &strf_vids.colours_used, 4);
                                 copy_bytes(&strl_child.data[36], &strf_vids.colours_important, 4);
 
-                                unsigned int extradata_size = strl_child.length - (sizeof(strf_vids_type) - sizeof(std::vector<unsigned char>));
+                                unsigned int extradata_size = strl_child.length - 40;
                                 if (extradata_size > 0) {
                                     strf_vids.extradata.resize(extradata_size);
                                     copy_bytes(&strl_child.data[40], strf_vids.extradata.data(), extradata_size);
@@ -470,7 +472,7 @@ private:
                                 }
 
                                 strf_auds_type strf_auds;
-                                // TODO: ...
+                                // TODO: Currently ignoring audio chunks.
 
                                 strf_type strf;
                                 strf.identifier = fourcc("auds");
@@ -588,7 +590,7 @@ private:
                             frame_type frame;
                             frame.data.resize(chunk_frame.length);
                             copy_bytes(&chunk_frame.data[0], frame.data.data(), chunk_frame.length);
-                            this->frames[stream_id].push_back(frame);
+                            this->frames[static_cast<size_t>(stream_id)].push_back(frame);
                         }
                     }
                 }
@@ -602,7 +604,7 @@ private:
                     frame_type frame;
                     frame.data.resize(chunk_frame.length);
                     copy_bytes(&chunk_frame.data[0], frame.data.data(), chunk_frame.length);
-                    this->frames[stream_id].push_back(frame);
+                    this->frames[static_cast<size_t>(stream_id)].push_back(frame);
                 }
             }
 
@@ -640,7 +642,7 @@ private:
                     frame_type frame;
                     frame.data.resize(chunk_frame.length);
                     copy_bytes(&chunk_frame.data[0], frame.data.data(), chunk_frame.length);
-                    this->frames[stream_id].push_back(frame);
+                    this->frames[static_cast<size_t>(stream_id)].push_back(frame);
                 }
                 return true;
             }
@@ -653,7 +655,7 @@ private:
                 frame_type frame;
                 frame.data.resize(index.size);
                 copy_bytes(&chunk->data[index.offset + 8], frame.data.data(), index.size);
-                this->frames[stream_id].push_back(frame);
+                this->frames[static_cast<size_t>(stream_id)].push_back(frame);
             }
         }
 

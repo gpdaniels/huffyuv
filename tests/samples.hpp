@@ -6,39 +6,58 @@
 #include "ppm.hpp"
 
 static const std::array<std::string, 10> sample_names {
-    "camera2_hfyu32.avi",
-    "rgb24_interlaced.avi",
-    "rgb_predgrad.avi",
-    "rgb_predleft.avi",
-    "rgb_predleftnodecorr.avi",
-    "rgb_v1.avi",
-    "yuv_predgrad.avi",
-    "yuv_predleft.avi",
-    "yuv_predmed.avi",
-    "yuv_v1.avi"
+    {
+        "camera2_hfyu32.avi",
+        "rgb24_interlaced.avi",
+        "rgb_predgrad.avi",
+        "rgb_predleft.avi",
+        "rgb_predleftnodecorr.avi",
+        "rgb_v1.avi",
+        "yuv_predgrad.avi",
+        "yuv_predleft.avi",
+        "yuv_predmed.avi",
+        "yuv_v1.avi"
+    }
 };
 
 static const std::array<size_t, 10> sample_frames {
-    30,
-    2,
-    42,
-    42,
-    42,
-    42,
-    42,
-    42,
-    42,
-    42
+    {
+        30,
+        2,
+        42,
+        42,
+        42,
+        42,
+        42,
+        42,
+        42,
+        42
+    }
 };
 
-std::unique_ptr<unsigned char[]> load_frame(int index_sample, int index_frame, int& width, int& height) {
+static const std::array<std::array<int, 3>, 10> sample_yuv_rgb_error = {
+    {
+        { 51, 22, 84 },
+        { 9, 4, 23 },
+        { 5, 3, 9 },
+        { 5, 3, 9 },
+        { 5, 3, 9 },
+        { 5, 3, 9 },
+        { 2, 3, 4 },
+        { 2, 3, 4 },
+        { 2, 3, 4 },
+        { 2, 3, 4 }
+    }
+};
+
+inline std::unique_ptr<unsigned char[]> load_frame(size_t index_sample, size_t index_frame, size_t& width, size_t& height) {
     std::string frame = std::to_string(index_frame);
-    frame = std::string(std::max(6 - (int)frame.size(), 0), '0') + frame;
+    frame = std::string(static_cast<std::string::size_type>(std::max(6ll - static_cast<long long int>(frame.size()), 0ll)), '0') + frame;
     std::string path = "frames/" + sample_names[index_sample] + "/" + frame + ".ppm";
     return ppm_load(path, width, height);
 }
 
-std::unique_ptr<unsigned char[]> load_video(int index_sample, int& length) {
+inline std::unique_ptr<unsigned char[]> load_video(size_t index_sample, size_t& length) {
     std::string path = "samples/" + sample_names[index_sample];
     std::FILE* handle = std::fopen(path.c_str(), "rb");
     if (!handle) {
