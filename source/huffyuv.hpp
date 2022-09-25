@@ -1,55 +1,35 @@
 #pragma once
 
-#include "avi.hpp"
-
 #include <cstdio>
-#include <vector>
 
 class huffyuv final {
 public:
-    // Highest number of lines that will not trigger fieldmode.
-    constexpr static const int field_threshold = 288;
-    constexpr static const bool ignore_interlaced_flag = false;
+    constexpr static const int interlaced_threshold = 288;
+
+public:
+    enum class format_type {
+        yuyv,
+        bgr,
+        bgra
+    };
+
+    enum class predictor_type {
+        classic,
+        left,
+        gradient,
+        median
+    };
 
 private:
     // Static Y,U,V or B,G,R or B-G,G,R-G (decorrelation) huffman tables for the different prediction modes.
     // Note: When processing RGBA data, A is processed with either the R table or the R-G table (decorrelation).
-    class tables final {
+    class builtin_tables final {
     public:
-        enum class modes {
-            rgb_classic,
-            rgb_prediction_left,
-            rgb_prediction_left_decorrelate,
-            rgb_prediction_gradient_decorrelate,
-
-            yuv_classic,
-            yuv_prediction_left,
-            yuv_prediction_gradient,
-            yuv_prediction_median
-        };
-
-        class shift_type final {
-        public:
-            unsigned char data[256];
-        };
-        class add_shifted_type final {
-        public:
-            unsigned int data[256];
-        };
-        class decode_table_type final {
-        public:
-            tables::shift_type shift;
-            tables::add_shifted_type add_shifted;
-            unsigned char* pointers[32];
-            unsigned char data[129 * 25];
-        };
-
-    private:
         class rgb final {
         public:
             class classic final {
             public:
-                constexpr static const shift_type shift_b = {{
+                constexpr static const unsigned char shift_b[256] = {
                     0x02, 0x04, 0x03, 0x05, 0x05, 0x07, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D,
@@ -58,8 +38,8 @@ private:
                     0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04,
-                }};
-                constexpr static const shift_type shift_g = {{
+                };
+                constexpr static const unsigned char shift_g[256] = {
                     0x02, 0x04, 0x03, 0x05, 0x05, 0x07, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D,
@@ -68,8 +48,8 @@ private:
                     0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04,
-                }};
-                constexpr static const shift_type shift_r = {{
+                };
+                constexpr static const unsigned char shift_r[256] = {
                     0x02, 0x04, 0x03, 0x05, 0x05, 0x07, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D,
@@ -78,9 +58,9 @@ private:
                     0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_b = {{
+                constexpr static const unsigned int add_shifted_b[256] = {
                     0xC0000000, 0x90000000, 0xA0000000, 0x60000000, 0x50000000, 0x46000000, 0x40000000, 0x3A000000, 0x36000000, 0x32000000, 0x30000000, 0x2D000000, 0x2C000000, 0x29000000, 0x27000000, 0x25000000,
                     0x24800000, 0x23000000, 0x22000000, 0x20800000, 0x20000000, 0x1E800000, 0x1D000000, 0x1C000000, 0x1A800000, 0x19000000, 0x18800000, 0x17000000, 0x16000000, 0x14800000, 0x13000000, 0x12000000,
                     0x11000000, 0x10400000, 0x0FC00000, 0x0F400000, 0x0E800000, 0x0DC00000, 0x0D400000, 0x0CC00000, 0x0C000000, 0x0B800000, 0x0B400000, 0x0AC00000, 0x0A400000, 0x09C00000, 0x09800000, 0x09000000,
@@ -97,8 +77,8 @@ private:
                     0x0F800000, 0x10000000, 0x10800000, 0x10C00000, 0x11400000, 0x11800000, 0x12800000, 0x13800000, 0x14000000, 0x15000000, 0x15800000, 0x16800000, 0x17800000, 0x18000000, 0x19800000, 0x1A000000,
                     0x1B000000, 0x1B800000, 0x1C800000, 0x1D800000, 0x1E000000, 0x1F000000, 0x1F800000, 0x21000000, 0x21800000, 0x22800000, 0x23800000, 0x24000000, 0x26000000, 0x28000000, 0x2A000000, 0x2B000000,
                     0x2E000000, 0x2F000000, 0x31000000, 0x33000000, 0x34000000, 0x38000000, 0x3C000000, 0x3E000000, 0x42000000, 0x44000000, 0x48000000, 0x4C000000, 0x58000000, 0x68000000, 0x70000000, 0x80000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_g = {{
+                };
+                constexpr static const unsigned int add_shifted_g[256] = {
                     0xC0000000, 0x90000000, 0xA0000000, 0x60000000, 0x50000000, 0x46000000, 0x40000000, 0x3A000000, 0x36000000, 0x32000000, 0x30000000, 0x2D000000, 0x2C000000, 0x29000000, 0x27000000, 0x25000000,
                     0x24800000, 0x23000000, 0x22000000, 0x20800000, 0x20000000, 0x1E800000, 0x1D000000, 0x1C000000, 0x1A800000, 0x19000000, 0x18800000, 0x17000000, 0x16000000, 0x14800000, 0x13000000, 0x12000000,
                     0x11000000, 0x10400000, 0x0FC00000, 0x0F400000, 0x0E800000, 0x0DC00000, 0x0D400000, 0x0CC00000, 0x0C000000, 0x0B800000, 0x0B400000, 0x0AC00000, 0x0A400000, 0x09C00000, 0x09800000, 0x09000000,
@@ -115,8 +95,8 @@ private:
                     0x0F800000, 0x10000000, 0x10800000, 0x10C00000, 0x11400000, 0x11800000, 0x12800000, 0x13800000, 0x14000000, 0x15000000, 0x15800000, 0x16800000, 0x17800000, 0x18000000, 0x19800000, 0x1A000000,
                     0x1B000000, 0x1B800000, 0x1C800000, 0x1D800000, 0x1E000000, 0x1F000000, 0x1F800000, 0x21000000, 0x21800000, 0x22800000, 0x23800000, 0x24000000, 0x26000000, 0x28000000, 0x2A000000, 0x2B000000,
                     0x2E000000, 0x2F000000, 0x31000000, 0x33000000, 0x34000000, 0x38000000, 0x3C000000, 0x3E000000, 0x42000000, 0x44000000, 0x48000000, 0x4C000000, 0x58000000, 0x68000000, 0x70000000, 0x80000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_r = {{
+                };
+                constexpr static const unsigned int add_shifted_r[256] = {
                     0xC0000000, 0x90000000, 0xA0000000, 0x60000000, 0x50000000, 0x46000000, 0x40000000, 0x3A000000, 0x36000000, 0x32000000, 0x30000000, 0x2D000000, 0x2C000000, 0x29000000, 0x27000000, 0x25000000,
                     0x24800000, 0x23000000, 0x22000000, 0x20800000, 0x20000000, 0x1E800000, 0x1D000000, 0x1C000000, 0x1A800000, 0x19000000, 0x18800000, 0x17000000, 0x16000000, 0x14800000, 0x13000000, 0x12000000,
                     0x11000000, 0x10400000, 0x0FC00000, 0x0F400000, 0x0E800000, 0x0DC00000, 0x0D400000, 0x0CC00000, 0x0C000000, 0x0B800000, 0x0B400000, 0x0AC00000, 0x0A400000, 0x09C00000, 0x09800000, 0x09000000,
@@ -133,12 +113,12 @@ private:
                     0x0F800000, 0x10000000, 0x10800000, 0x10C00000, 0x11400000, 0x11800000, 0x12800000, 0x13800000, 0x14000000, 0x15000000, 0x15800000, 0x16800000, 0x17800000, 0x18000000, 0x19800000, 0x1A000000,
                     0x1B000000, 0x1B800000, 0x1C800000, 0x1D800000, 0x1E000000, 0x1F000000, 0x1F800000, 0x21000000, 0x21800000, 0x22800000, 0x23800000, 0x24000000, 0x26000000, 0x28000000, 0x2A000000, 0x2B000000,
                     0x2E000000, 0x2F000000, 0x31000000, 0x33000000, 0x34000000, 0x38000000, 0x3C000000, 0x3E000000, 0x42000000, 0x44000000, 0x48000000, 0x4C000000, 0x58000000, 0x68000000, 0x70000000, 0x80000000,
-                }};
+                };
             };
 
-            class prediction_left final {
+            class left final {
             public:
-                constexpr static const shift_type shift_b = {{
+                constexpr static const unsigned char shift_b[256] = {
                     0x03, 0x03, 0x03, 0x04, 0x05, 0x06, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D,
@@ -147,8 +127,8 @@ private:
                     0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x06, 0x05, 0x04, 0x03, 0x03,
-                }};
-                constexpr static const shift_type shift_g = {{
+                };
+                constexpr static const unsigned char shift_g[256] = {
                     0x02, 0x03, 0x03, 0x05, 0x06, 0x06, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D,
@@ -157,8 +137,8 @@ private:
                     0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x06, 0x06, 0x05, 0x04, 0x03,
-                }};
-                constexpr static const shift_type shift_r = {{
+                };
+                constexpr static const unsigned char shift_r[256] = {
                     0x02, 0x03, 0x04, 0x04, 0x05, 0x06, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D,
@@ -167,9 +147,9 @@ private:
                     0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x06, 0x05, 0x04, 0x04, 0x03,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_b = {{
+                constexpr static const unsigned int add_shifted_b[256] = {
                     0x60000000, 0x80000000, 0xA0000000, 0x40000000, 0x30000000, 0x28000000, 0x20000000, 0x22000000, 0x17000000, 0x18000000, 0x19000000, 0x1A000000, 0x10000000, 0x10800000, 0x11000000, 0x11800000,
                     0x12000000, 0x12800000, 0x0A000000, 0x0A400000, 0x0A800000, 0x0AC00000, 0x0B000000, 0x0B400000, 0x0B800000, 0x0BC00000, 0x0C000000, 0x0C400000, 0x0C800000, 0x0CC00000, 0x0D000000, 0x05400000,
                     0x05600000, 0x05800000, 0x05A00000, 0x05C00000, 0x05E00000, 0x06000000, 0x06200000, 0x06400000, 0x06600000, 0x06800000, 0x06A00000, 0x06C00000, 0x06E00000, 0x07000000, 0x07200000, 0x07400000,
@@ -186,8 +166,8 @@ private:
                     0x07E00000, 0x08000000, 0x08200000, 0x08400000, 0x08600000, 0x08800000, 0x08A00000, 0x08C00000, 0x08E00000, 0x09000000, 0x09200000, 0x09400000, 0x09600000, 0x09800000, 0x09A00000, 0x09C00000,
                     0x09E00000, 0x0D400000, 0x0D800000, 0x0DC00000, 0x0E000000, 0x0E400000, 0x0E800000, 0x0EC00000, 0x0F000000, 0x0F400000, 0x0F800000, 0x0FC00000, 0x13000000, 0x13800000, 0x14000000, 0x14800000,
                     0x15000000, 0x15800000, 0x16000000, 0x16800000, 0x1B000000, 0x1C000000, 0x1D000000, 0x1E000000, 0x1F000000, 0x24000000, 0x26000000, 0x2C000000, 0x38000000, 0x50000000, 0xC0000000, 0xE0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_g = {{
+                };
+                constexpr static const unsigned int add_shifted_g[256] = {
                     0xC0000000, 0x60000000, 0x80000000, 0x40000000, 0x30000000, 0x34000000, 0x26000000, 0x28000000, 0x1B000000, 0x1C000000, 0x1D000000, 0x1E000000, 0x1F000000, 0x11800000, 0x12000000, 0x12800000,
                     0x13000000, 0x13800000, 0x14000000, 0x14800000, 0x15000000, 0x15800000, 0x0A800000, 0x0AC00000, 0x0B000000, 0x0B400000, 0x0B800000, 0x0BC00000, 0x0C000000, 0x0C400000, 0x0C800000, 0x0CC00000,
                     0x0D000000, 0x0D400000, 0x0D800000, 0x0DC00000, 0x05400000, 0x05600000, 0x05800000, 0x05A00000, 0x05C00000, 0x05E00000, 0x06000000, 0x06200000, 0x06400000, 0x06600000, 0x06800000, 0x06A00000,
@@ -204,8 +184,8 @@ private:
                     0x09400000, 0x09600000, 0x09800000, 0x09A00000, 0x09C00000, 0x09E00000, 0x0A000000, 0x0A200000, 0x0A400000, 0x0A600000, 0x0E000000, 0x0E400000, 0x0E800000, 0x0EC00000, 0x0F000000, 0x0F400000,
                     0x0F800000, 0x0FC00000, 0x10000000, 0x10400000, 0x10800000, 0x10C00000, 0x11000000, 0x11400000, 0x16000000, 0x16800000, 0x17000000, 0x17800000, 0x18000000, 0x18800000, 0x19000000, 0x19800000,
                     0x1A000000, 0x1A800000, 0x20000000, 0x21000000, 0x22000000, 0x23000000, 0x24000000, 0x25000000, 0x2A000000, 0x2C000000, 0x2E000000, 0x38000000, 0x3C000000, 0x48000000, 0x50000000, 0xA0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_r = {{
+                };
+                constexpr static const unsigned int add_shifted_r[256] = {
                     0xC0000000, 0x80000000, 0x40000000, 0x50000000, 0x30000000, 0x28000000, 0x20000000, 0x22000000, 0x17000000, 0x18000000, 0x19000000, 0x1A000000, 0x0F800000, 0x10000000, 0x10800000, 0x11000000,
                     0x11800000, 0x12000000, 0x12800000, 0x0A000000, 0x0A400000, 0x0A800000, 0x0AC00000, 0x0B000000, 0x0B400000, 0x0B800000, 0x0BC00000, 0x0C000000, 0x0C400000, 0x0C800000, 0x05600000, 0x05800000,
                     0x05A00000, 0x05C00000, 0x05E00000, 0x06000000, 0x06200000, 0x06400000, 0x06600000, 0x06800000, 0x06A00000, 0x06C00000, 0x06E00000, 0x07000000, 0x07200000, 0x07400000, 0x07600000, 0x07800000,
@@ -222,12 +202,12 @@ private:
                     0x07E00000, 0x08000000, 0x08200000, 0x08400000, 0x08600000, 0x08800000, 0x08A00000, 0x08C00000, 0x08E00000, 0x09000000, 0x09200000, 0x09400000, 0x09600000, 0x09800000, 0x09A00000, 0x09C00000,
                     0x09E00000, 0x0CC00000, 0x0D000000, 0x0D400000, 0x0D800000, 0x0DC00000, 0x0E000000, 0x0E400000, 0x0E800000, 0x0EC00000, 0x0F000000, 0x0F400000, 0x13000000, 0x13800000, 0x14000000, 0x14800000,
                     0x15000000, 0x15800000, 0x16000000, 0x16800000, 0x1B000000, 0x1C000000, 0x1D000000, 0x1E000000, 0x1F000000, 0x24000000, 0x26000000, 0x2C000000, 0x38000000, 0x60000000, 0x70000000, 0xA0000000,
-                }};
+                };
             };
 
-            class prediction_left_decorrelate final {
+            class left_decorrelate final {
             public:
-                constexpr static const shift_type shift_bg = {{
+                constexpr static const unsigned char shift_bg[256] = {
                     0x02, 0x03, 0x03, 0x04, 0x05, 0x06, 0x07, 0x09, 0x09, 0x0A, 0x0B, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F,
                     0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x13, 0x12, 0x12, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x14, 0x14,
                     0x14, 0x14, 0x14, 0x15, 0x14, 0x15, 0x15, 0x15, 0x15, 0x15, 0x16, 0x15, 0x16, 0x16, 0x16, 0x17, 0x17, 0x16, 0x18, 0x1A, 0x18, 0x18, 0x19, 0x19, 0x19, 0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -236,8 +216,8 @@ private:
                     0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x18, 0x19, 0x1A, 0x19, 0x19, 0x1A, 0x1A, 0x18, 0x17, 0x18, 0x19, 0x17, 0x16, 0x16, 0x16, 0x16, 0x16, 0x15, 0x15, 0x15, 0x15, 0x15, 0x14, 0x14, 0x14, 0x14,
                     0x14, 0x14, 0x14, 0x14, 0x14, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x10, 0x10, 0x10, 0x10,
                     0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0C, 0x0B, 0x0B, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x03,
-                }};
-                constexpr static const shift_type shift_g = {{
+                };
+                constexpr static const unsigned char shift_g[256] = {
                     0x02, 0x03, 0x03, 0x05, 0x06, 0x06, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D,
@@ -246,8 +226,8 @@ private:
                     0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x06, 0x06, 0x05, 0x04, 0x03,
-                }};
-                constexpr static const shift_type shift_gr = {{
+                };
+                constexpr static const unsigned char shift_rg[256] = {
                     0x02, 0x03, 0x03, 0x04, 0x06, 0x06, 0x07, 0x08, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F, 0x0F,
                     0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x12, 0x11, 0x12, 0x12, 0x11, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12,
                     0x11, 0x12, 0x11, 0x11, 0x11, 0x12, 0x12, 0x12, 0x13, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x18, 0x1A, 0x1A, 0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -256,9 +236,9 @@ private:
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x18, 0x17, 0x17, 0x16, 0x16, 0x15,
                     0x15, 0x14, 0x15, 0x14, 0x14, 0x14, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x12, 0x13, 0x13, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x10, 0x10, 0x10, 0x10,
                     0x10, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x03,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_bg = {{
+                constexpr static const unsigned int add_shifted_bg[256] = {
                     0xC0000000, 0x40000000, 0x60000000, 0x20000000, 0x10000000, 0x08000000, 0x04000000, 0x01800000, 0x02000000, 0x01400000, 0x00E00000, 0x00B00000, 0x00C00000, 0x00700000, 0x00780000, 0x00800000,
                     0x00880000, 0x00900000, 0x00380000, 0x003C0000, 0x00400000, 0x00440000, 0x00480000, 0x004C0000, 0x00500000, 0x00540000, 0x00580000, 0x00200000, 0x00220000, 0x00240000, 0x00260000, 0x00280000,
                     0x002A0000, 0x000F0000, 0x00100000, 0x00110000, 0x00120000, 0x00130000, 0x00140000, 0x00078000, 0x00080000, 0x00088000, 0x00090000, 0x00098000, 0x000A0000, 0x000A8000, 0x00038000, 0x0003C000,
@@ -275,8 +255,8 @@ private:
                     0x00068000, 0x0006C000, 0x00070000, 0x00074000, 0x000B0000, 0x000B8000, 0x000C0000, 0x000C8000, 0x000D0000, 0x000D8000, 0x000E0000, 0x000E8000, 0x00150000, 0x00160000, 0x00170000, 0x00180000,
                     0x00190000, 0x001A0000, 0x001B0000, 0x001C0000, 0x001D0000, 0x001E0000, 0x001F0000, 0x002C0000, 0x002E0000, 0x00300000, 0x00320000, 0x00340000, 0x00360000, 0x005C0000, 0x00600000, 0x00640000,
                     0x00680000, 0x006C0000, 0x00980000, 0x00A00000, 0x00A80000, 0x00D00000, 0x01000000, 0x01200000, 0x02800000, 0x03000000, 0x06000000, 0x0C000000, 0x18000000, 0x30000000, 0x80000000, 0xA0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_g = {{
+                };
+                constexpr static const unsigned int add_shifted_g[256] = {
                     0xC0000000, 0x60000000, 0x80000000, 0x40000000, 0x30000000, 0x34000000, 0x26000000, 0x28000000, 0x1B000000, 0x1C000000, 0x1D000000, 0x1E000000, 0x1F000000, 0x11800000, 0x12000000, 0x12800000,
                     0x13000000, 0x13800000, 0x14000000, 0x14800000, 0x15000000, 0x15800000, 0x0A800000, 0x0AC00000, 0x0B000000, 0x0B400000, 0x0B800000, 0x0BC00000, 0x0C000000, 0x0C400000, 0x0C800000, 0x0CC00000,
                     0x0D000000, 0x0D400000, 0x0D800000, 0x0DC00000, 0x05400000, 0x05600000, 0x05800000, 0x05A00000, 0x05C00000, 0x05E00000, 0x06000000, 0x06200000, 0x06400000, 0x06600000, 0x06800000, 0x06A00000,
@@ -293,8 +273,8 @@ private:
                     0x09400000, 0x09600000, 0x09800000, 0x09A00000, 0x09C00000, 0x09E00000, 0x0A000000, 0x0A200000, 0x0A400000, 0x0A600000, 0x0E000000, 0x0E400000, 0x0E800000, 0x0EC00000, 0x0F000000, 0x0F400000,
                     0x0F800000, 0x0FC00000, 0x10000000, 0x10400000, 0x10800000, 0x10C00000, 0x11000000, 0x11400000, 0x16000000, 0x16800000, 0x17000000, 0x17800000, 0x18000000, 0x18800000, 0x19000000, 0x19800000,
                     0x1A000000, 0x1A800000, 0x20000000, 0x21000000, 0x22000000, 0x23000000, 0x24000000, 0x25000000, 0x2A000000, 0x2C000000, 0x2E000000, 0x38000000, 0x3C000000, 0x48000000, 0x50000000, 0xA0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_gr = {{
+                };
+                constexpr static const unsigned int add_shifted_rg[256] = {
                     0xC0000000, 0x40000000, 0x60000000, 0x20000000, 0x0C000000, 0x10000000, 0x08000000, 0x06000000, 0x03000000, 0x03800000, 0x04000000, 0x04800000, 0x01800000, 0x01C00000, 0x00E00000, 0x01000000,
                     0x01200000, 0x00900000, 0x00A00000, 0x00680000, 0x00700000, 0x00780000, 0x00340000, 0x00380000, 0x003C0000, 0x00400000, 0x00440000, 0x00480000, 0x004C0000, 0x001E0000, 0x00200000, 0x00220000,
                     0x00240000, 0x00260000, 0x00280000, 0x00120000, 0x00130000, 0x00140000, 0x00150000, 0x00160000, 0x00170000, 0x00180000, 0x00078000, 0x00080000, 0x00088000, 0x00090000, 0x00098000, 0x000A0000,
@@ -311,12 +291,12 @@ private:
                     0x00060000, 0x00064000, 0x00068000, 0x0006C000, 0x00070000, 0x00074000, 0x000F0000, 0x000F8000, 0x00100000, 0x00108000, 0x00110000, 0x00118000, 0x00190000, 0x001A0000, 0x001B0000, 0x001C0000,
                     0x001D0000, 0x002A0000, 0x002C0000, 0x002E0000, 0x00300000, 0x00320000, 0x00500000, 0x00540000, 0x00580000, 0x005C0000, 0x00600000, 0x00640000, 0x00800000, 0x00880000, 0x00B00000, 0x00C00000,
                     0x00D00000, 0x01400000, 0x01600000, 0x02000000, 0x02400000, 0x02800000, 0x02C00000, 0x05000000, 0x05800000, 0x07000000, 0x0A000000, 0x14000000, 0x18000000, 0x30000000, 0x80000000, 0xA0000000,
-                }};
+                };
             };
 
-            class prediction_gradient_decorrelate final {
+            class gradient_decorrelate final {
             public:
-                constexpr static const shift_type shift_bg = {{
+                constexpr static const unsigned char shift_bg[256] = {
                     0x02, 0x03, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0A, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10,
                     0x10, 0x10, 0x10, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x13, 0x13, 0x13, 0x13, 0x13, 0x14, 0x14, 0x14, 0x14, 0x14, 0x15, 0x15, 0x15, 0x15, 0x15,
                     0x16, 0x15, 0x15, 0x15, 0x16, 0x15, 0x16, 0x17, 0x16, 0x17, 0x16, 0x15, 0x17, 0x15, 0x15, 0x17, 0x16, 0x16, 0x17, 0x16, 0x16, 0x19, 0x18, 0x19, 0x17, 0x17, 0x19, 0x18, 0x19, 0x19, 0x18, 0x19,
@@ -325,8 +305,8 @@ private:
                     0x19, 0x19, 0x19, 0x19, 0x19, 0x17, 0x19, 0x19, 0x17, 0x19, 0x19, 0x18, 0x18, 0x17, 0x17, 0x17, 0x18, 0x17, 0x17, 0x17, 0x17, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x15, 0x17, 0x16, 0x15, 0x15,
                     0x15, 0x15, 0x15, 0x14, 0x15, 0x15, 0x13, 0x14, 0x13, 0x13, 0x13, 0x13, 0x13, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x10,
                     0x10, 0x10, 0x10, 0x10, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0A, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x03,
-                }};
-                constexpr static const shift_type shift_g = {{
+                };
+                constexpr static const unsigned char shift_g[256] = {
                     0x02, 0x03, 0x03, 0x05, 0x06, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D,
                     0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
@@ -335,8 +315,8 @@ private:
                     0x11, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E,
                     0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x06, 0x05, 0x03, 0x03,
-                }};
-                constexpr static const shift_type shift_gr = {{
+                };
+                constexpr static const unsigned char shift_rg[256] = {
                     0x02, 0x03, 0x03, 0x04, 0x06, 0x07, 0x08, 0x0A, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x10,
                     0x10, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x12, 0x12, 0x12, 0x12, 0x12, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x14, 0x14, 0x14, 0x14, 0x15, 0x14, 0x15, 0x16, 0x16, 0x16, 0x17, 0x16, 0x16, 0x16,
                     0x17, 0x17, 0x18, 0x18, 0x17, 0x19, 0x18, 0x18, 0x17, 0x18, 0x19, 0x17, 0x18, 0x18, 0x19, 0x18, 0x19, 0x18, 0x18, 0x19, 0x19, 0x19, 0x19, 0x18, 0x19, 0x19, 0x18, 0x19, 0x19, 0x19, 0x18, 0x19,
@@ -345,9 +325,9 @@ private:
                     0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x18, 0x18, 0x17, 0x17, 0x16, 0x16, 0x15, 0x16, 0x15, 0x15, 0x14, 0x15, 0x15, 0x14, 0x14, 0x14, 0x14, 0x15, 0x14, 0x14,
                     0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x13, 0x13, 0x13, 0x13, 0x13, 0x13, 0x12, 0x13, 0x13, 0x13, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
                     0x11, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0A, 0x08, 0x07, 0x06, 0x03, 0x03, 0x03,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_bg = {{
+                constexpr static const unsigned int add_shifted_bg[256] = {
                     0xC0000000, 0x40000000, 0x60000000, 0x20000000, 0x10000000, 0x08000000, 0x04000000, 0x02000000, 0x01800000, 0x01000000, 0x01200000, 0x00A00000, 0x00B00000, 0x00C00000, 0x00580000, 0x00600000,
                     0x00680000, 0x00700000, 0x00300000, 0x00340000, 0x00380000, 0x003C0000, 0x00400000, 0x001A0000, 0x001C0000, 0x001E0000, 0x00200000, 0x00220000, 0x00240000, 0x000F0000, 0x00100000, 0x00110000,
                     0x00120000, 0x00130000, 0x00140000, 0x00070000, 0x00078000, 0x00080000, 0x00088000, 0x00090000, 0x00098000, 0x000A0000, 0x000A8000, 0x00030000, 0x00034000, 0x00038000, 0x0003C000, 0x00040000,
@@ -364,8 +344,8 @@ private:
                     0x00054000, 0x00058000, 0x0005C000, 0x00060000, 0x00064000, 0x00068000, 0x0006C000, 0x000B0000, 0x000B8000, 0x000C0000, 0x000C8000, 0x000D0000, 0x000D8000, 0x000E0000, 0x000E8000, 0x00150000,
                     0x00160000, 0x00170000, 0x00180000, 0x00190000, 0x00260000, 0x00280000, 0x002A0000, 0x002C0000, 0x002E0000, 0x00440000, 0x00480000, 0x004C0000, 0x00500000, 0x00540000, 0x00780000, 0x00800000,
                     0x00880000, 0x00900000, 0x00980000, 0x00D00000, 0x00E00000, 0x00F00000, 0x01400000, 0x01600000, 0x01C00000, 0x03000000, 0x06000000, 0x0C000000, 0x18000000, 0x30000000, 0x80000000, 0xA0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_g = {{
+                };
+                constexpr static const unsigned int add_shifted_g[256] = {
                     0xC0000000, 0x40000000, 0x60000000, 0x30000000, 0x28000000, 0x1C000000, 0x1E000000, 0x20000000, 0x13000000, 0x14000000, 0x15000000, 0x16000000, 0x0B800000, 0x0C000000, 0x0C800000, 0x0D000000,
                     0x0D800000, 0x0E000000, 0x0E800000, 0x0F000000, 0x05C00000, 0x06000000, 0x06400000, 0x06800000, 0x06C00000, 0x07000000, 0x07400000, 0x07800000, 0x07C00000, 0x08000000, 0x08400000, 0x02800000,
                     0x02A00000, 0x02C00000, 0x02E00000, 0x03000000, 0x03200000, 0x03400000, 0x03600000, 0x03800000, 0x03A00000, 0x03C00000, 0x03E00000, 0x04000000, 0x01400000, 0x01500000, 0x01600000, 0x01700000,
@@ -382,8 +362,8 @@ private:
                     0x02400000, 0x02500000, 0x02600000, 0x02700000, 0x04200000, 0x04400000, 0x04600000, 0x04800000, 0x04A00000, 0x04C00000, 0x04E00000, 0x05000000, 0x05200000, 0x05400000, 0x05600000, 0x05800000,
                     0x05A00000, 0x08800000, 0x08C00000, 0x09000000, 0x09400000, 0x09800000, 0x09C00000, 0x0A000000, 0x0A400000, 0x0A800000, 0x0AC00000, 0x0B000000, 0x0B400000, 0x0F800000, 0x10000000, 0x10800000,
                     0x11000000, 0x11800000, 0x12000000, 0x12800000, 0x17000000, 0x18000000, 0x19000000, 0x1A000000, 0x1B000000, 0x22000000, 0x24000000, 0x26000000, 0x2C000000, 0x38000000, 0x80000000, 0xA0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_gr = {{
+                };
+                constexpr static const unsigned int add_shifted_rg[256] = {
                     0xC0000000, 0x20000000, 0x40000000, 0x10000000, 0x08000000, 0x04000000, 0x02000000, 0x01800000, 0x01000000, 0x01200000, 0x00900000, 0x00A00000, 0x00B00000, 0x00500000, 0x00580000, 0x00600000,
                     0x00680000, 0x002C0000, 0x00300000, 0x00340000, 0x00380000, 0x003C0000, 0x001A0000, 0x001C0000, 0x001E0000, 0x00200000, 0x00220000, 0x00240000, 0x000E0000, 0x000F0000, 0x00100000, 0x00110000,
                     0x00120000, 0x00078000, 0x00080000, 0x00088000, 0x00090000, 0x00098000, 0x000A0000, 0x0003C000, 0x00040000, 0x00044000, 0x00048000, 0x0004C000, 0x0001E000, 0x00020000, 0x00022000, 0x00024000,
@@ -400,7 +380,7 @@ private:
                     0x0003A000, 0x00054000, 0x00058000, 0x0005C000, 0x00060000, 0x00064000, 0x00068000, 0x0006C000, 0x00070000, 0x00074000, 0x000A8000, 0x000B0000, 0x000B8000, 0x000C0000, 0x000C8000, 0x000D0000,
                     0x000D8000, 0x00130000, 0x00140000, 0x00150000, 0x00160000, 0x00170000, 0x00180000, 0x00190000, 0x00260000, 0x00280000, 0x002A0000, 0x00400000, 0x00440000, 0x00480000, 0x004C0000, 0x00700000,
                     0x00780000, 0x00800000, 0x00880000, 0x00C00000, 0x00D00000, 0x00E00000, 0x00F00000, 0x01400000, 0x01600000, 0x01C00000, 0x03000000, 0x06000000, 0x0C000000, 0x60000000, 0x80000000, 0xA0000000,
-                }};
+                };
             };
         };
 
@@ -408,7 +388,7 @@ private:
         public:
             class classic final {
             public:
-                constexpr static const shift_type shift_y = {{
+                constexpr static const unsigned char shift_y[256] = {
                     0x02, 0x04, 0x03, 0x05, 0x05, 0x07, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D,
@@ -417,8 +397,8 @@ private:
                     0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09,
                     0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04,
-                }};
-                constexpr static const shift_type shift_u = {{
+                };
+                constexpr static const unsigned char shift_u[256] = {
                     0x02, 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0B, 0x0B, 0x0C, 0x0C, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x10, 0x11, 0x11, 0x12, 0x12,
                     0x13, 0x13, 0x14, 0x14, 0x15, 0x15, 0x16, 0x16, 0x16, 0x17, 0x17, 0x17, 0x17, 0x17, 0x18, 0x19, 0x18, 0x18, 0x19, 0x19, 0x18, 0x19, 0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x1A, 0x19, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -427,8 +407,8 @@ private:
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x18, 0x1A, 0x19, 0x1A, 0x19, 0x18, 0x18, 0x18, 0x18, 0x18, 0x17, 0x17, 0x17, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x15,
                     0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x14, 0x14, 0x14, 0x13, 0x13, 0x12, 0x12, 0x11, 0x10, 0x10, 0x0F, 0x0F, 0x0E, 0x0E, 0x0D, 0x0D, 0x0C, 0x0B, 0x0B, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x02,
-                }};
-                constexpr static const shift_type shift_v = {{
+                };
+                constexpr static const unsigned char shift_v[256] = {
                     0x02, 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0B, 0x0B, 0x0C, 0x0C, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x10, 0x11, 0x11, 0x12, 0x12,
                     0x13, 0x13, 0x14, 0x14, 0x15, 0x15, 0x16, 0x16, 0x16, 0x17, 0x17, 0x17, 0x17, 0x17, 0x18, 0x19, 0x18, 0x18, 0x19, 0x19, 0x18, 0x19, 0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x1A, 0x19, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -437,9 +417,9 @@ private:
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x18, 0x1A, 0x19, 0x1A, 0x19, 0x18, 0x18, 0x18, 0x18, 0x18, 0x17, 0x17, 0x17, 0x16, 0x16, 0x16, 0x16, 0x16, 0x16, 0x15,
                     0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x14, 0x14, 0x14, 0x13, 0x13, 0x12, 0x12, 0x11, 0x10, 0x10, 0x0F, 0x0F, 0x0E, 0x0E, 0x0D, 0x0D, 0x0C, 0x0B, 0x0B, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x02,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_y = {{
+                constexpr static const unsigned int add_shifted_y[256] = {
                     0xC0000000, 0x90000000, 0xA0000000, 0x60000000, 0x50000000, 0x46000000, 0x40000000, 0x3A000000, 0x36000000, 0x32000000, 0x30000000, 0x2D000000, 0x2C000000, 0x29000000, 0x27000000, 0x25000000,
                     0x24800000, 0x23000000, 0x22000000, 0x20800000, 0x20000000, 0x1E800000, 0x1D000000, 0x1C000000, 0x1A800000, 0x19000000, 0x18800000, 0x17000000, 0x16000000, 0x14800000, 0x13000000, 0x12000000,
                     0x11000000, 0x10400000, 0x0FC00000, 0x0F400000, 0x0E800000, 0x0DC00000, 0x0D400000, 0x0CC00000, 0x0C000000, 0x0B800000, 0x0B400000, 0x0AC00000, 0x0A400000, 0x09C00000, 0x09800000, 0x09000000,
@@ -456,8 +436,8 @@ private:
                     0x0F800000, 0x10000000, 0x10800000, 0x10C00000, 0x11400000, 0x11800000, 0x12800000, 0x13800000, 0x14000000, 0x15000000, 0x15800000, 0x16800000, 0x17800000, 0x18000000, 0x19800000, 0x1A000000,
                     0x1B000000, 0x1B800000, 0x1C800000, 0x1D800000, 0x1E000000, 0x1F000000, 0x1F800000, 0x21000000, 0x21800000, 0x22800000, 0x23800000, 0x24000000, 0x26000000, 0x28000000, 0x2A000000, 0x2B000000,
                     0x2E000000, 0x2F000000, 0x31000000, 0x33000000, 0x34000000, 0x38000000, 0x3C000000, 0x3E000000, 0x42000000, 0x44000000, 0x48000000, 0x4C000000, 0x58000000, 0x68000000, 0x70000000, 0x80000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_u = {{
+                };
+                constexpr static const unsigned int add_shifted_u[256] = {
                     0xC0000000, 0x40000000, 0x20000000, 0x10000000, 0x08000000, 0x04000000, 0x03000000, 0x01800000, 0x00E00000, 0x00A00000, 0x00700000, 0x00500000, 0x00400000, 0x00300000, 0x002C0000, 0x00240000,
                     0x001C0000, 0x001A0000, 0x00160000, 0x00140000, 0x00120000, 0x00100000, 0x000E0000, 0x000A0000, 0x00090000, 0x00070000, 0x00060000, 0x00040000, 0x00038000, 0x00028000, 0x00020000, 0x0001C000,
                     0x00016000, 0x00010000, 0x0000D000, 0x0000B000, 0x00009800, 0x00007800, 0x00005800, 0x00005C00, 0x00005000, 0x00004200, 0x00004000, 0x00003800, 0x00003600, 0x00003A00, 0x00003300, 0x00002680,
@@ -474,8 +454,8 @@ private:
                     0x00002980, 0x00003000, 0x00003100, 0x00003200, 0x00002C00, 0x00002F00, 0x00003400, 0x00003E00, 0x00003C00, 0x00004800, 0x00004400, 0x00004C00, 0x00005400, 0x00006000, 0x00006400, 0x00006800,
                     0x00007000, 0x00008000, 0x00008800, 0x00009000, 0x0000A000, 0x0000A800, 0x0000C000, 0x0000E000, 0x0000F000, 0x00012000, 0x00014000, 0x00018000, 0x00024000, 0x00030000, 0x00050000, 0x00080000,
                     0x000C0000, 0x00180000, 0x00200000, 0x00280000, 0x00380000, 0x00480000, 0x00600000, 0x00800000, 0x00C00000, 0x01000000, 0x02000000, 0x06000000, 0x0C000000, 0x18000000, 0x30000000, 0x80000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_v = {{
+                };
+                constexpr static const unsigned int add_shifted_v[256] = {
                     0xC0000000, 0x40000000, 0x20000000, 0x10000000, 0x08000000, 0x04000000, 0x03000000, 0x01800000, 0x00E00000, 0x00A00000, 0x00700000, 0x00500000, 0x00400000, 0x00300000, 0x002C0000, 0x00240000,
                     0x001C0000, 0x001A0000, 0x00160000, 0x00140000, 0x00120000, 0x00100000, 0x000E0000, 0x000A0000, 0x00090000, 0x00070000, 0x00060000, 0x00040000, 0x00038000, 0x00028000, 0x00020000, 0x0001C000,
                     0x00016000, 0x00010000, 0x0000D000, 0x0000B000, 0x00009800, 0x00007800, 0x00005800, 0x00005C00, 0x00005000, 0x00004200, 0x00004000, 0x00003800, 0x00003600, 0x00003A00, 0x00003300, 0x00002680,
@@ -492,12 +472,12 @@ private:
                     0x00002980, 0x00003000, 0x00003100, 0x00003200, 0x00002C00, 0x00002F00, 0x00003400, 0x00003E00, 0x00003C00, 0x00004800, 0x00004400, 0x00004C00, 0x00005400, 0x00006000, 0x00006400, 0x00006800,
                     0x00007000, 0x00008000, 0x00008800, 0x00009000, 0x0000A000, 0x0000A800, 0x0000C000, 0x0000E000, 0x0000F000, 0x00012000, 0x00014000, 0x00018000, 0x00024000, 0x00030000, 0x00050000, 0x00080000,
                     0x000C0000, 0x00180000, 0x00200000, 0x00280000, 0x00380000, 0x00480000, 0x00600000, 0x00800000, 0x00C00000, 0x01000000, 0x02000000, 0x06000000, 0x0C000000, 0x18000000, 0x30000000, 0x80000000,
-                }};
+                };
             };
 
-            class prediction_left final {
+            class left final {
             public:
-                constexpr static const shift_type shift_y = {{
+                constexpr static const unsigned char shift_y[256] = {
                     0x02, 0x02, 0x04, 0x05, 0x06, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E,
@@ -506,8 +486,8 @@ private:
                     0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
                     0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x06, 0x05, 0x04, 0x03,
-                }};
-                constexpr static const shift_type shift_u = {{
+                };
+                constexpr static const unsigned char shift_u[256] = {
                     0x02, 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0B, 0x0C, 0x0D, 0x0D, 0x0E, 0x0E, 0x0F, 0x0F, 0x10, 0x10, 0x11, 0x11, 0x12, 0x12, 0x12, 0x13, 0x13, 0x14, 0x15, 0x15, 0x15, 0x15,
                     0x16, 0x16, 0x17, 0x17, 0x19, 0x19, 0x19, 0x19, 0x19, 0x1A, 0x19, 0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -516,8 +496,8 @@ private:
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x1A, 0x1A, 0x1A, 0x19, 0x1A, 0x1A, 0x19, 0x17, 0x17, 0x16, 0x17, 0x16, 0x16, 0x16, 0x16, 0x15, 0x16, 0x15, 0x15, 0x15, 0x15,
                     0x14, 0x14, 0x14, 0x13, 0x13, 0x13, 0x12, 0x12, 0x12, 0x11, 0x11, 0x10, 0x10, 0x10, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x0A, 0x08, 0x07, 0x06, 0x05, 0x04, 0x02,
-                }};
-                constexpr static const shift_type shift_v = {{
+                };
+                constexpr static const unsigned char shift_v[256] = {
                     0x02, 0x02, 0x04, 0x05, 0x07, 0x07, 0x08, 0x09, 0x09, 0x0A, 0x0A, 0x0B, 0x0B, 0x0C, 0x0C, 0x0D, 0x0D, 0x0E, 0x0E, 0x0F, 0x0F, 0x10, 0x10, 0x11, 0x11, 0x11, 0x12, 0x12, 0x12, 0x12, 0x12, 0x11,
                     0x10, 0x10, 0x10, 0x10, 0x10, 0x11, 0x11, 0x12, 0x12, 0x14, 0x15, 0x17, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -526,9 +506,9 @@ private:
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x19, 0x19, 0x1A, 0x1A, 0x18,
                     0x19, 0x18, 0x17, 0x17, 0x17, 0x16, 0x16, 0x15, 0x14, 0x13, 0x14, 0x13, 0x11, 0x10, 0x0F, 0x0E, 0x0D, 0x0D, 0x0C, 0x0C, 0x0B, 0x0B, 0x0A, 0x0A, 0x09, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x02,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_y = {{
+                constexpr static const unsigned int add_shifted_y[256] = {
                     0x80000000, 0xC0000000, 0x40000000, 0x30000000, 0x28000000, 0x20000000, 0x22000000, 0x16000000, 0x17000000, 0x18000000, 0x19000000, 0x0F000000, 0x0F800000, 0x10000000, 0x10800000, 0x11000000,
                     0x11800000, 0x12000000, 0x09000000, 0x09400000, 0x09800000, 0x09C00000, 0x0A000000, 0x0A400000, 0x0A800000, 0x0AC00000, 0x0B000000, 0x0B400000, 0x0B800000, 0x0BC00000, 0x04A00000, 0x04C00000,
                     0x04E00000, 0x05000000, 0x05200000, 0x05400000, 0x05600000, 0x05800000, 0x05A00000, 0x05C00000, 0x05E00000, 0x06000000, 0x06200000, 0x06400000, 0x06600000, 0x06800000, 0x06A00000, 0x06C00000,
@@ -545,8 +525,8 @@ private:
                     0x06E00000, 0x07000000, 0x07200000, 0x07400000, 0x07600000, 0x07800000, 0x07A00000, 0x07C00000, 0x07E00000, 0x08000000, 0x08200000, 0x08400000, 0x08600000, 0x08800000, 0x08A00000, 0x08C00000,
                     0x08E00000, 0x0C000000, 0x0C400000, 0x0C800000, 0x0CC00000, 0x0D000000, 0x0D400000, 0x0D800000, 0x0DC00000, 0x0E000000, 0x0E400000, 0x0E800000, 0x0EC00000, 0x12800000, 0x13000000, 0x13800000,
                     0x14000000, 0x14800000, 0x15000000, 0x15800000, 0x1A000000, 0x1B000000, 0x1C000000, 0x1D000000, 0x1E000000, 0x1F000000, 0x24000000, 0x26000000, 0x2C000000, 0x38000000, 0x50000000, 0x60000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_u = {{
+                };
+                constexpr static const unsigned int add_shifted_u[256] = {
                     0x40000000, 0x80000000, 0x20000000, 0x10000000, 0x08000000, 0x04000000, 0x02000000, 0x01800000, 0x00C00000, 0x00600000, 0x00800000, 0x00400000, 0x00280000, 0x00300000, 0x00180000, 0x001C0000,
                     0x000A0000, 0x000C0000, 0x00050000, 0x00060000, 0x00030000, 0x00038000, 0x00018000, 0x0001C000, 0x00020000, 0x0000E000, 0x00010000, 0x0000A000, 0x00005800, 0x00006000, 0x00006800, 0x00007000,
                     0x00003800, 0x00003C00, 0x00002E00, 0x00003000, 0x00002900, 0x00002980, 0x00002A00, 0x00002A80, 0x00002B00, 0x00000000, 0x00002B80, 0x00002C00, 0x00000040, 0x00000080, 0x000000C0, 0x00000100,
@@ -563,8 +543,8 @@ private:
                     0x000028C0, 0x00002D80, 0x00003200, 0x00003400, 0x00004000, 0x00003600, 0x00004400, 0x00004800, 0x00004C00, 0x00005000, 0x00007800, 0x00005400, 0x00008000, 0x00008800, 0x00009000, 0x00009800,
                     0x0000B000, 0x0000C000, 0x0000D000, 0x00012000, 0x00014000, 0x00016000, 0x00024000, 0x00028000, 0x0002C000, 0x00040000, 0x00048000, 0x00070000, 0x00080000, 0x00090000, 0x000E0000, 0x00100000,
                     0x00120000, 0x00140000, 0x00160000, 0x00200000, 0x00240000, 0x00380000, 0x00500000, 0x00A00000, 0x01000000, 0x01400000, 0x03000000, 0x06000000, 0x0C000000, 0x18000000, 0x30000000, 0xC0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_v = {{
+                };
+                constexpr static const unsigned int add_shifted_v[256] = {
                     0x40000000, 0x80000000, 0x20000000, 0x10000000, 0x06000000, 0x08000000, 0x04000000, 0x02000000, 0x02800000, 0x01000000, 0x01400000, 0x00800000, 0x00A00000, 0x00400000, 0x00500000, 0x00200000,
                     0x00280000, 0x00140000, 0x00180000, 0x000E0000, 0x00100000, 0x00060000, 0x00070000, 0x00028000, 0x00030000, 0x00038000, 0x0000C000, 0x00010000, 0x00014000, 0x00018000, 0x0001C000, 0x00040000,
                     0x00080000, 0x00090000, 0x000A0000, 0x000B0000, 0x000C0000, 0x00048000, 0x00050000, 0x00020000, 0x00024000, 0x00005000, 0x00004000, 0x00003000, 0x00000000, 0x00000040, 0x00000080, 0x000000C0,
@@ -581,12 +561,12 @@ private:
                     0x00002900, 0x00002940, 0x00002980, 0x000029C0, 0x00002A00, 0x00002A40, 0x00002A80, 0x00002AC0, 0x00002B00, 0x00002B40, 0x00002C00, 0x00002C80, 0x00002D00, 0x00002B80, 0x00002BC0, 0x00002E00,
                     0x00002D80, 0x00002F00, 0x00003200, 0x00003400, 0x00003600, 0x00003800, 0x00003C00, 0x00004800, 0x00006000, 0x00008000, 0x00007000, 0x0000A000, 0x00058000, 0x000D0000, 0x00120000, 0x001C0000,
                     0x00300000, 0x00380000, 0x00600000, 0x00700000, 0x00C00000, 0x00E00000, 0x01800000, 0x01C00000, 0x03000000, 0x03800000, 0x05000000, 0x0A000000, 0x0C000000, 0x18000000, 0x30000000, 0xC0000000,
-                }};
+                };
             };
 
-            class prediction_gradient final {
+            class gradient final {
             public:
-                constexpr static const shift_type shift_y = {{
+                constexpr static const unsigned char shift_y[256] = {
                     0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x07, 0x07, 0x08, 0x08, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E,
                     0x0E, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x12, 0x12, 0x12, 0x12,
@@ -595,8 +575,8 @@ private:
                     0x13, 0x12, 0x12, 0x12, 0x12, 0x12, 0x11, 0x11, 0x11, 0x11, 0x11, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E,
                     0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x06, 0x05, 0x04, 0x02,
-                }};
-                constexpr static const shift_type shift_u = {{
+                };
+                constexpr static const unsigned char shift_u[256] = {
                     0x02, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0D, 0x0E, 0x10, 0x10, 0x11, 0x11, 0x12, 0x12, 0x13, 0x13, 0x13, 0x14, 0x14, 0x14, 0x14, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15, 0x15,
                     0x16, 0x17, 0x17, 0x17, 0x17, 0x1A, 0x18, 0x1A, 0x1A, 0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -605,8 +585,8 @@ private:
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x1A, 0x1A, 0x18, 0x19, 0x1A, 0x18, 0x1A, 0x19, 0x1A, 0x19, 0x18, 0x18, 0x18, 0x18, 0x17, 0x16, 0x17, 0x16, 0x16,
                     0x15, 0x15, 0x15, 0x14, 0x15, 0x14, 0x14, 0x14, 0x15, 0x14, 0x15, 0x14, 0x14, 0x14, 0x14, 0x13, 0x13, 0x13, 0x13, 0x12, 0x12, 0x11, 0x10, 0x0F, 0x0F, 0x0D, 0x0C, 0x09, 0x07, 0x05, 0x03, 0x02,
-                }};
-                constexpr static const shift_type shift_v = {{
+                };
+                constexpr static const unsigned char shift_v[256] = {
                     0x02, 0x02, 0x04, 0x06, 0x08, 0x09, 0x0A, 0x0C, 0x0C, 0x0D, 0x0E, 0x0E, 0x0F, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11, 0x12, 0x12, 0x13, 0x13, 0x13, 0x14, 0x15, 0x17, 0x16, 0x16, 0x17, 0x16, 0x17,
                     0x16, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17,
                     0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17,
@@ -615,9 +595,9 @@ private:
                     0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17,
                     0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17, 0x17,
                     0x17, 0x17, 0x16, 0x15, 0x16, 0x15, 0x14, 0x15, 0x13, 0x14, 0x14, 0x13, 0x12, 0x13, 0x12, 0x12, 0x11, 0x10, 0x10, 0x10, 0x0F, 0x0E, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x08, 0x05, 0x03, 0x02,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_y = {{
+                constexpr static const unsigned int add_shifted_y[256] = {
                     0x80000000, 0x60000000, 0x40000000, 0x30000000, 0x28000000, 0x1C000000, 0x1E000000, 0x20000000, 0x12000000, 0x13000000, 0x14000000, 0x15000000, 0x16000000, 0x0A000000, 0x0A800000, 0x0B000000,
                     0x0B800000, 0x0C000000, 0x0C800000, 0x0D000000, 0x0D800000, 0x04800000, 0x04C00000, 0x05000000, 0x05400000, 0x05800000, 0x05C00000, 0x06000000, 0x06400000, 0x06800000, 0x06C00000, 0x07000000,
                     0x02200000, 0x02400000, 0x02600000, 0x02800000, 0x02A00000, 0x02C00000, 0x02E00000, 0x03000000, 0x03200000, 0x03400000, 0x01100000, 0x01200000, 0x01300000, 0x01400000, 0x01500000, 0x01600000,
@@ -634,8 +614,8 @@ private:
                     0x01A00000, 0x01B00000, 0x01C00000, 0x01D00000, 0x01E00000, 0x01F00000, 0x02000000, 0x02100000, 0x03600000, 0x03800000, 0x03A00000, 0x03C00000, 0x03E00000, 0x04000000, 0x04200000, 0x04400000,
                     0x04600000, 0x07400000, 0x07800000, 0x07C00000, 0x08000000, 0x08400000, 0x08800000, 0x08C00000, 0x09000000, 0x09400000, 0x09800000, 0x09C00000, 0x0E000000, 0x0E800000, 0x0F000000, 0x0F800000,
                     0x10000000, 0x10800000, 0x11000000, 0x11800000, 0x17000000, 0x18000000, 0x19000000, 0x1A000000, 0x1B000000, 0x22000000, 0x24000000, 0x26000000, 0x2C000000, 0x38000000, 0x50000000, 0xC0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_u = {{
+                };
+                constexpr static const unsigned int add_shifted_u[256] = {
                     0x40000000, 0x80000000, 0x10000000, 0x04000000, 0x01000000, 0x00400000, 0x00200000, 0x00100000, 0x000C0000, 0x00050000, 0x00060000, 0x00038000, 0x00040000, 0x00028000, 0x0002C000, 0x0001A000,
                     0x0001C000, 0x0001E000, 0x0000D000, 0x0000E000, 0x0000F000, 0x00010000, 0x00005000, 0x00005800, 0x00006000, 0x00006800, 0x00007000, 0x00007800, 0x00008000, 0x00008800, 0x00009000, 0x00009800,
                     0x00004000, 0x00003400, 0x00003600, 0x00003800, 0x00003A00, 0x00000000, 0x00002D00, 0x00000040, 0x00000080, 0x00002A80, 0x000000C0, 0x00000100, 0x00000140, 0x00000180, 0x000001C0, 0x00000200,
@@ -652,8 +632,8 @@ private:
                     0x00002B80, 0x000029C0, 0x00002F00, 0x00002A00, 0x00002C00, 0x00002A40, 0x00002C80, 0x00003000, 0x00003100, 0x00003200, 0x00003300, 0x00003C00, 0x00004400, 0x00003E00, 0x00004800, 0x00004C00,
                     0x0000A000, 0x0000A800, 0x0000B000, 0x00011000, 0x0000B800, 0x00012000, 0x00013000, 0x00014000, 0x0000C000, 0x00015000, 0x0000C800, 0x00016000, 0x00017000, 0x00018000, 0x00019000, 0x00020000,
                     0x00022000, 0x00024000, 0x00026000, 0x00030000, 0x00034000, 0x00048000, 0x00070000, 0x00080000, 0x000A0000, 0x00180000, 0x00300000, 0x00800000, 0x02000000, 0x08000000, 0x20000000, 0xC0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_v = {{
+                };
+                constexpr static const unsigned int add_shifted_v[256] = {
                     0x40000000, 0x80000000, 0x10000000, 0x04000000, 0x02000000, 0x01000000, 0x00800000, 0x00300000, 0x00400000, 0x00200000, 0x00100000, 0x00140000, 0x000C0000, 0x00060000, 0x00070000, 0x00080000,
                     0x00040000, 0x00048000, 0x00050000, 0x0002C000, 0x00030000, 0x00020000, 0x00022000, 0x00024000, 0x0001C000, 0x0001A000, 0x00000000, 0x00018800, 0x00018C00, 0x00000200, 0x00019000, 0x00000400,
                     0x00019400, 0x00000600, 0x00000800, 0x00000A00, 0x00000C00, 0x00000E00, 0x00001000, 0x00001200, 0x00001400, 0x00001600, 0x00001800, 0x00001A00, 0x00001C00, 0x00001E00, 0x00002000, 0x00002200,
@@ -670,12 +650,12 @@ private:
                     0x00016400, 0x00016600, 0x00016800, 0x00016A00, 0x00016C00, 0x00016E00, 0x00017000, 0x00017200, 0x00017400, 0x00017600, 0x00017800, 0x00017A00, 0x00017C00, 0x00017E00, 0x00018000, 0x00018200,
                     0x00018400, 0x00018600, 0x00019800, 0x0001A800, 0x00019C00, 0x0001B000, 0x0001D000, 0x0001B800, 0x00026000, 0x0001E000, 0x0001F000, 0x00028000, 0x00034000, 0x0002A000, 0x00038000, 0x0003C000,
                     0x00058000, 0x00090000, 0x000A0000, 0x000B0000, 0x000E0000, 0x00180000, 0x001C0000, 0x00280000, 0x00500000, 0x00600000, 0x00C00000, 0x01800000, 0x03000000, 0x08000000, 0x20000000, 0xC0000000,
-                }};
+                };
             };
 
-            class prediction_median final {
+            class median final {
             public:
-                constexpr static const shift_type shift_y = {{
+                constexpr static const unsigned char shift_y[256] = {
                     0x02, 0x02, 0x05, 0x06, 0x07, 0x07, 0x08, 0x08, 0x08, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0F, 0x0F,
                     0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x12, 0x11, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x13, 0x13, 0x14,
@@ -684,8 +664,8 @@ private:
                     0x13, 0x13, 0x13, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F,
                     0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0E, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0D, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0B, 0x0B,
                     0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x09, 0x09, 0x09, 0x09, 0x09, 0x09, 0x08, 0x08, 0x08, 0x08, 0x07, 0x07, 0x07, 0x06, 0x04, 0x02,
-                }};
-                constexpr static const shift_type shift_u = {{
+                };
+                constexpr static const unsigned char shift_u[256] = {
                     0x02, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x11, 0x12, 0x13, 0x13, 0x13, 0x14, 0x14, 0x14, 0x15, 0x14, 0x15, 0x15, 0x15, 0x15, 0x14, 0x14, 0x15, 0x15, 0x16,
                     0x17, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
@@ -694,8 +674,8 @@ private:
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A,
                     0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x1A, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x18, 0x18, 0x19, 0x18, 0x17, 0x18, 0x16, 0x16, 0x16, 0x15,
                     0x15, 0x15, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x13, 0x13, 0x13, 0x13, 0x12, 0x12, 0x12, 0x11, 0x10, 0x10, 0x0F, 0x0E, 0x0E, 0x0C, 0x0B, 0x0A, 0x07, 0x05, 0x03, 0x02,
-                }};
-                constexpr static const shift_type shift_v = {{
+                };
+                constexpr static const unsigned char shift_v[256] = {
                     0x01, 0x03, 0x05, 0x07, 0x08, 0x09, 0x0B, 0x0B, 0x0C, 0x0D, 0x0D, 0x0E, 0x0F, 0x0F, 0x10, 0x10, 0x10, 0x11, 0x11, 0x11, 0x12, 0x12, 0x14, 0x14, 0x14, 0x14, 0x15, 0x19, 0x18, 0x19, 0x19, 0x18,
                     0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19,
                     0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19,
@@ -704,9 +684,9 @@ private:
                     0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19,
                     0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x18, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19, 0x19,
                     0x19, 0x19, 0x19, 0x19, 0x19, 0x18, 0x19, 0x18, 0x18, 0x16, 0x17, 0x15, 0x14, 0x14, 0x13, 0x12, 0x12, 0x11, 0x10, 0x0F, 0x0F, 0x0E, 0x0D, 0x0C, 0x0C, 0x0B, 0x0A, 0x09, 0x08, 0x07, 0x04, 0x02,
-                }};
+                };
 
-                constexpr static const add_shifted_type add_shifted_y = {{
+                constexpr static const unsigned int add_shifted_y[256] = {
                     0x40000000, 0x80000000, 0x28000000, 0x20000000, 0x16000000, 0x18000000, 0x0F000000, 0x10000000, 0x11000000, 0x09000000, 0x09800000, 0x0A000000, 0x0A800000, 0x0B000000, 0x0B800000, 0x05000000,
                     0x05400000, 0x05800000, 0x05C00000, 0x06000000, 0x06400000, 0x06800000, 0x06C00000, 0x07000000, 0x02400000, 0x02600000, 0x02800000, 0x02A00000, 0x02C00000, 0x02E00000, 0x03000000, 0x03200000,
                     0x03400000, 0x03600000, 0x03800000, 0x01100000, 0x01200000, 0x01300000, 0x01400000, 0x01500000, 0x01600000, 0x01700000, 0x01800000, 0x01900000, 0x00800000, 0x00880000, 0x00900000, 0x00980000,
@@ -723,8 +703,8 @@ private:
                     0x00F00000, 0x00F80000, 0x01000000, 0x01080000, 0x01A00000, 0x01B00000, 0x01C00000, 0x01D00000, 0x01E00000, 0x01F00000, 0x02000000, 0x02100000, 0x02200000, 0x02300000, 0x03A00000, 0x03C00000,
                     0x03E00000, 0x04000000, 0x04200000, 0x04400000, 0x04600000, 0x04800000, 0x04A00000, 0x04C00000, 0x04E00000, 0x07400000, 0x07800000, 0x07C00000, 0x08000000, 0x08400000, 0x08800000, 0x08C00000,
                     0x0C000000, 0x0C800000, 0x0D000000, 0x0D800000, 0x0E000000, 0x0E800000, 0x12000000, 0x13000000, 0x14000000, 0x15000000, 0x1A000000, 0x1C000000, 0x1E000000, 0x24000000, 0x30000000, 0xC0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_u = {{
+                };
+                constexpr static const unsigned int add_shifted_u[256] = {
                     0x40000000, 0x80000000, 0x10000000, 0x04000000, 0x01000000, 0x00800000, 0x00400000, 0x00200000, 0x00180000, 0x000C0000, 0x00080000, 0x00050000, 0x00038000, 0x00040000, 0x00028000, 0x0001A000,
                     0x0001C000, 0x0001E000, 0x0000A000, 0x0000B000, 0x0000C000, 0x00005000, 0x0000D000, 0x00005800, 0x00006000, 0x00006800, 0x00007000, 0x0000E000, 0x0000F000, 0x00007800, 0x00008000, 0x00004000,
                     0x00003C00, 0x00002300, 0x00002380, 0x00002400, 0x00002480, 0x00002500, 0x00002580, 0x00002600, 0x00002680, 0x00002700, 0x00002780, 0x00002800, 0x00002880, 0x00002900, 0x00002980, 0x00002A00,
@@ -741,8 +721,8 @@ private:
                     0x00003480, 0x00003500, 0x00003580, 0x00003600, 0x00003680, 0x00003700, 0x00003800, 0x00003900, 0x00003780, 0x00003A00, 0x00003E00, 0x00003B00, 0x00004400, 0x00004800, 0x00004C00, 0x00008800,
                     0x00009000, 0x00009800, 0x00010000, 0x00011000, 0x00012000, 0x00013000, 0x00014000, 0x00015000, 0x00016000, 0x00017000, 0x00018000, 0x00019000, 0x00020000, 0x00022000, 0x00024000, 0x00026000,
                     0x0002C000, 0x00030000, 0x00034000, 0x00048000, 0x00060000, 0x00070000, 0x000A0000, 0x00100000, 0x00140000, 0x00300000, 0x00600000, 0x00C00000, 0x02000000, 0x08000000, 0x20000000, 0xC0000000,
-                }};
-                constexpr static const add_shifted_type add_shifted_v = {{
+                };
+                constexpr static const unsigned int add_shifted_v[256] = {
                     0x80000000, 0x20000000, 0x08000000, 0x04000000, 0x02000000, 0x01000000, 0x00600000, 0x00800000, 0x00300000, 0x00180000, 0x00200000, 0x00100000, 0x00080000, 0x000A0000, 0x00040000, 0x00050000,
                     0x00060000, 0x00020000, 0x00028000, 0x00030000, 0x00010000, 0x00014000, 0x00008000, 0x00009000, 0x0000A000, 0x0000B000, 0x00007000, 0x00000000, 0x00006400, 0x00000080, 0x00000100, 0x00006500,
                     0x00000180, 0x00000200, 0x00000280, 0x00000300, 0x00000380, 0x00000400, 0x00000480, 0x00000500, 0x00000580, 0x00000600, 0x00000680, 0x00000700, 0x00000780, 0x00000800, 0x00000880, 0x00000900,
@@ -759,635 +739,39 @@ private:
                     0x00005980, 0x00005A00, 0x00005A80, 0x00005B00, 0x00005B80, 0x00005C00, 0x00005C80, 0x00005D00, 0x00006600, 0x00005D80, 0x00005E00, 0x00005E80, 0x00005F00, 0x00005F80, 0x00006000, 0x00006080,
                     0x00006100, 0x00006180, 0x00006200, 0x00006280, 0x00006300, 0x00006700, 0x00006380, 0x00006800, 0x00006900, 0x00006C00, 0x00006A00, 0x00007800, 0x0000C000, 0x0000D000, 0x0000E000, 0x00018000,
                     0x0001C000, 0x00038000, 0x00070000, 0x000C0000, 0x000E0000, 0x00140000, 0x00280000, 0x00400000, 0x00500000, 0x00A00000, 0x00C00000, 0x01800000, 0x03000000, 0x06000000, 0x10000000, 0x40000000,
-                }};
+                };
             };
         };
+    };
 
+private:
+    class table_type final {
     public:
-        constexpr static void get_tables(
-            modes mode,
-            shift_type& shift_0,
-            shift_type& shift_1,
-            shift_type& shift_2,
-            add_shifted_type& add_shifted_0,
-            add_shifted_type& add_shifted_1,
-            add_shifted_type& add_shifted_2
-        ) {
-            switch (mode) {
-                case modes::rgb_classic:
-                    shift_0 = rgb::classic::shift_b;
-                    shift_1 = rgb::classic::shift_g;
-                    shift_2 = rgb::classic::shift_r;
-                    add_shifted_0 = rgb::classic::add_shifted_b;
-                    add_shifted_1 = rgb::classic::add_shifted_g;
-                    add_shifted_2 = rgb::classic::add_shifted_r;
-                    break;
-                case modes::rgb_prediction_left:
-                    shift_0 = rgb::prediction_left::shift_b;
-                    shift_1 = rgb::prediction_left::shift_g;
-                    shift_2 = rgb::prediction_left::shift_r;
-                    add_shifted_0 = rgb::prediction_left::add_shifted_b;
-                    add_shifted_1 = rgb::prediction_left::add_shifted_g;
-                    add_shifted_2 = rgb::prediction_left::add_shifted_r;
-                    break;
-                case modes::rgb_prediction_left_decorrelate:
-                    shift_0 = rgb::prediction_left_decorrelate::shift_bg;
-                    shift_1 = rgb::prediction_left_decorrelate::shift_g;
-                    shift_2 = rgb::prediction_left_decorrelate::shift_gr;
-                    add_shifted_0 = rgb::prediction_left_decorrelate::add_shifted_bg;
-                    add_shifted_1 = rgb::prediction_left_decorrelate::add_shifted_g;
-                    add_shifted_2 = rgb::prediction_left_decorrelate::add_shifted_gr;
-                    break;
-                case modes::rgb_prediction_gradient_decorrelate:
-                    shift_0 = rgb::prediction_gradient_decorrelate::shift_bg;
-                    shift_1 = rgb::prediction_gradient_decorrelate::shift_g;
-                    shift_2 = rgb::prediction_gradient_decorrelate::shift_gr;
-                    add_shifted_0 = rgb::prediction_gradient_decorrelate::add_shifted_bg;
-                    add_shifted_1 = rgb::prediction_gradient_decorrelate::add_shifted_g;
-                    add_shifted_2 = rgb::prediction_gradient_decorrelate::add_shifted_gr;
-                    break;
-                case modes::yuv_classic:
-                    shift_0 = yuv::classic::shift_y;
-                    shift_1 = yuv::classic::shift_u;
-                    shift_2 = yuv::classic::shift_v;
-                    add_shifted_0 = yuv::classic::add_shifted_y;
-                    add_shifted_1 = yuv::classic::add_shifted_u;
-                    add_shifted_2 = yuv::classic::add_shifted_v;
-                    break;
-                case modes::yuv_prediction_left:
-                    shift_0 = yuv::prediction_left::shift_y;
-                    shift_1 = yuv::prediction_left::shift_u;
-                    shift_2 = yuv::prediction_left::shift_v;
-                    add_shifted_0 = yuv::prediction_left::add_shifted_y;
-                    add_shifted_1 = yuv::prediction_left::add_shifted_u;
-                    add_shifted_2 = yuv::prediction_left::add_shifted_v;
-                    break;
-                case modes::yuv_prediction_gradient:
-                    shift_0 = yuv::prediction_gradient::shift_y;
-                    shift_1 = yuv::prediction_gradient::shift_u;
-                    shift_2 = yuv::prediction_gradient::shift_v;
-                    add_shifted_0 = yuv::prediction_gradient::add_shifted_y;
-                    add_shifted_1 = yuv::prediction_gradient::add_shifted_u;
-                    add_shifted_2 = yuv::prediction_gradient::add_shifted_v;
-                    break;
-                case modes::yuv_prediction_median:
-                    shift_0 = yuv::prediction_median::shift_y;
-                    shift_1 = yuv::prediction_median::shift_u;
-                    shift_2 = yuv::prediction_median::shift_v;
-                    add_shifted_0 = yuv::prediction_median::add_shifted_y;
-                    add_shifted_1 = yuv::prediction_median::add_shifted_u;
-                    add_shifted_2 = yuv::prediction_median::add_shifted_v;
-                    break;
-            }
-        }
-    };
-
-    enum class image_types {
-        uyvy,
-        yuyv, // yuy2
-        bgr,
-        bgra
+        unsigned char shift[256];
+        unsigned int add_shifted[256];
+        unsigned char* pointers[32];
+        unsigned char data[129 * 25];
     };
 
 private:
-    avi video;
-    unsigned int stream_number;
-    int bit_count;
+    bool valid;
+    int width;
+    int height;
     bool interlaced;
-    tables::modes mode;
-    tables::decode_table_type decode[3];
-    std::vector<avi::frame_type> frames_uncompressed;
-
-public:
-    bool parse(const unsigned char* data, unsigned long long int length) {
-        this->frames_uncompressed.clear();
-
-        if (!this->video.parse(data, length)) {
-            std::fprintf(stderr, "Error: Failed to parse avi file.\n");
-            return false;
-        }
-
-        this->stream_number = 0xFFFFFFFF;
-        for (unsigned int i = 0; i < this->video.get_strhs().size(); ++i) {
-            const avi::strh_type& strh = this->video.get_strhs()[i];
-            if (
-                (strh.type == avi::fourcc("vids")) &&
-                ((strh.handler == avi::fourcc("hfyu")) || (strh.handler == avi::fourcc("HFYU")))
-            ) {
-                const avi::strf_type& strf = this->video.get_strfs()[i];
-                if (
-                    (strf.identifier == avi::fourcc("vids")) &&
-                    (strf.strf_vids.compression_identifier == avi::fourcc("HFYU"))
-                ) {
-                    this->stream_number = i;
-                    break;
-                }
-            }
-        }
-        if (this->stream_number == 0xFFFFFFFF) {
-            std::fprintf(stderr, "Error: Failed find a HFYU encoded video stream inside the avi file.\n");
-            return false;
-        }
-
-        //const avi::strh_type& strh = this->video.get_strhs()[stream_number];
-        const avi::strf_vids_type& strf = this->video.get_strfs()[stream_number].strf_vids;
-
-        if (strf.height < 0) {
-            this->interlaced = ((-strf.height) > this->field_threshold);
-        }
-        else {
-            this->interlaced = ((strf.height) > this->field_threshold);
-        }
-
-        // Determine where the huffman tables are stored.
-        if (strf.header_size == 40) {
-            // Tables are not stored in the file.
-            if ((strf.bit_count & 0x0007) != 0) {
-                std::fprintf(stderr, "Error: Invalid bit count field with classic tables is not supported.\n");
-                return false;
-            }
-            this->bit_count = (strf.bit_count & ~0x0007);
-            if (this->bit_count >= 24) {
-                this->mode = tables::modes::rgb_classic;
-            }
-            else {
-                this->mode = tables::modes::yuv_classic;
-            }
-            tables::get_tables(
-                this->mode,
-                this->decode[0].shift,
-                this->decode[1].shift,
-                this->decode[2].shift,
-                this->decode[0].add_shifted,
-                this->decode[1].add_shifted,
-                this->decode[2].add_shifted
-            );
-        }
-        else {
-            const unsigned char* compressed_table_data = nullptr;
-            unsigned long long int compressed_table_length = 0;
-
-            // Tables are stored in the file.
-            if ((strf.bit_count & 0x0007) == 0) {
-                // Extradata is some config followed by table.
-
-                if (strf.extradata.size() < 4) {
-                    std::fprintf(stderr, "Error: Missing additional configuration parameters in stream header extradata.\n");
-                    return false;
-                }
-
-                if ((strf.extradata[1] & 0x07) != 0) {
-                    std::fprintf(stderr, "Error: Missing invalid additional configuration parameters in stream header extradata.\n");
-                    return false;
-                }
-                this->bit_count = strf.extradata[1];
-
-                switch (strf.extradata[0]) {
-                    default:
-                    case  0:
-                        this->mode = (this->bit_count >= 24) ? tables::modes::rgb_prediction_left : tables::modes::yuv_prediction_left;
-                        break;
-                    case  1:
-                        this->mode = tables::modes::yuv_prediction_gradient;
-                        break;
-                    case  2:
-                        this->mode = tables::modes::yuv_prediction_median;
-                        break;
-                    case 64:
-                        this->mode = tables::modes::rgb_prediction_left_decorrelate;
-                        break;
-                    case 65:
-                        this->mode = tables::modes::rgb_prediction_gradient_decorrelate;
-                        break;
-                }
-
-                // If we are not ignoring the interlaced flag.
-                if (this->ignore_interlaced_flag == false) {
-                    // If the flag is set to interlaced, override the interlaced boolean.
-                    if (((strf.extradata[2] >> 4) & 0x0F) == 0x01) {
-                        this->interlaced = true;
-                    }
-                    // If the flag is set to progressive, override the interlaced boolean.
-                    else if (((strf.extradata[2] >> 4) & 0x0F) == 0x02) {
-                        this->interlaced = false;
-                    }
-                    // Otherwise leave it as it was.
-                }
-
-                // unsigned char unused = strf.extradata[3];
-
-                compressed_table_data = &strf.extradata[4];
-                compressed_table_length = strf.extradata.size() - 4;
-            }
-            else {
-                // Extradata just the table, no additional config.
-
-                switch (strf.bit_count & 7) {
-                    default:
-                    case 1:
-                        this->mode = (strf.bit_count >= 24) ? tables::modes::rgb_prediction_left : tables::modes::yuv_prediction_left;
-                        break;
-                    case 2:
-                        this->mode = tables::modes::rgb_prediction_left_decorrelate;
-                        break;
-                    case 3:
-                        this->mode = (strf.bit_count >= 24) ? tables::modes::rgb_prediction_gradient_decorrelate : tables::modes::yuv_prediction_gradient;
-                        break;
-                    case 4:
-                        this->mode = tables::modes::yuv_prediction_median;
-                        break;
-                }
-
-                this->bit_count = (strf.bit_count & ~0x0007);
-
-                compressed_table_data = &strf.extradata[0];
-                compressed_table_length = strf.extradata.size();
-            }
-
-            // Check tables were found.
-            if ((compressed_table_data == nullptr) || (compressed_table_length == 0)) {
-                std::fprintf(stderr, "Error: Missing huffman table in stream header extradata.\n");
-                return false;
-            }
-
-            // Decompress runlength encoded tables of bit lengths per code.
-            // Stored in this order: YUV: Y_table, U_table, V_table
-            // Stored in this order: RGB: B_table, G_table, R_table
-            // Stored in this order: RGB with decorrelation: B-G_table, G_table, R-G_table
-            unsigned int data_index = 0;
-            for (int channel_index = 0; channel_index < 3; ++channel_index) {
-                int table_index = 0;
-                do {
-                    if (data_index >= compressed_table_length) {
-                        std::fprintf(stderr, "Error: Invalid huffman table in stream header extradata, insufficient data.\n");
-                        return false;
-                    }
-                    unsigned char value = compressed_table_data[data_index] & 0x1F;
-                    int repetitions = compressed_table_data[data_index++] >> 5;
-                    if (repetitions == 0) {
-                        if (data_index >= compressed_table_length) {
-                            std::fprintf(stderr, "Error: Invalid huffman table in stream header extradata, insufficient data after zero repetitions.\n");
-                            return false;
-                        }
-                        repetitions = compressed_table_data[data_index++];
-                        if (repetitions == 0) {
-                            std::fprintf(stderr, "Error: Invalid huffman table in stream header extradata, zero repetitions.\n");
-                            return false;
-                        }
-                    }
-                    if (table_index + repetitions > 256) {
-                        std::fprintf(stderr, "Error: Invalid huffman table in stream header extradata, invalid runlength encoding.\n");
-                        return false;
-                    }
-                    while (repetitions--) {
-                        this->decode[channel_index].shift.data[table_index++] = value;
-                    }
-                } while (table_index < 256);
-            }
-            // Should be at least one null byte at the end.
-            if (data_index == compressed_table_length) {
-                std::fprintf(stderr, "Error: Invalid huffman table in stream header extradata, missing null byte.\n");
-                return false;
-            }
-            if (compressed_table_data[data_index] != 0x00) {
-                std::fprintf(stderr, "Error: Invalid huffman table in stream header extradata, invalid null byte.\n");
-                return false;
-            }
-
-            // Calculate the add_shifted tables.
-            for (int channel_index = 0; channel_index < 3; ++channel_index) {
-                int min_bits_processed = 32;
-                unsigned int bits = 0;
-                do {
-                    int max_bits_pending = 0;
-                    for (int i = 0; i < 256; ++i) {
-                        if ((this->decode[channel_index].shift.data[i] < min_bits_processed) && (this->decode[channel_index].shift.data[i] > max_bits_pending)) {
-                            max_bits_pending = this->decode[channel_index].shift.data[i];
-                        }
-                    }
-                    unsigned int bit = 1 << (32 - max_bits_pending);
-                    if (bits & (bit - 1)) {
-                        std::fprintf(stderr, "Error: Invalid huffman table in stream header extradata, ???.\n");
-                        return false;
-                    }
-                    for (int i = 0; i < 256; ++i) {
-                        if (this->decode[channel_index].shift.data[i] == max_bits_pending) {
-                            this->decode[channel_index].add_shifted.data[i] = bits;
-                            bits += bit;
-                        }
-                    }
-                    min_bits_processed = max_bits_pending;
-                } while (bits & 0xFFFFFFFF);
-            }
-        }
-
-        // Validate the bit count per pixel.
-        if ((this->bit_count != 16) && (this->bit_count != 24) && (this->bit_count != 32)) {
-            std::fprintf(stderr, "Error: Unsupported bit count per pixel.\n");
-            return false;
-        }
-
-        // Compute the decode tables from the extracted tables.
-        for (int channel_index = 0; channel_index < 3; ++channel_index) {
-            int code_lengths[256] = {};
-            int code_firstbits[256] = {};
-            int table_lengths[32];
-            for (int i = 0; i < 32; ++i) {
-                table_lengths[i] = -1;
-            }
-            int all_zero_code = -1;
-            for (int i = 0; i < 256; ++i) {
-                if (this->decode[channel_index].add_shifted.data[i] != 0) {
-                    for (int firstbit = 31; firstbit >= 0; --firstbit) {
-                        if (this->decode[channel_index].add_shifted.data[i] & (1 << firstbit)) {
-                            code_firstbits[i] = firstbit;
-                            const int code_length = this->decode[channel_index].shift.data[i] - (32 - firstbit);
-                            code_lengths[i] = code_length;
-                            table_lengths[firstbit] = std::max(static_cast<int>(table_lengths[firstbit]), code_length);
-                            break;
-                        }
-                    }
-                } else {
-                    all_zero_code = i;
-                }
-            }
-            if (all_zero_code < 0) {
-                std::fprintf(stderr, "Failed to find all zero code in huffman table.\n");
-                return false;
-            }
-            unsigned char* p = this->decode[channel_index].data;
-            *p++ = 31;
-            *p++ = static_cast<unsigned char>(all_zero_code);
-            for (int i = 0; i < 32; ++i) {
-                if (table_lengths[i] == -1) {
-                    this->decode[channel_index].pointers[i] = this->decode[channel_index].data;
-                } else {
-                    this->decode[channel_index].pointers[i] = p;
-                    *p++ = static_cast<unsigned char>(i - table_lengths[i]);
-                    p += 1 << table_lengths[i];
-                }
-            }
-            for (int i = 0; i < 256; ++i) {
-                if (this->decode[channel_index].add_shifted.data[i]) {
-                    int firstbit = code_firstbits[i];
-                    int val = static_cast<int>(this->decode[channel_index].add_shifted.data[i]) - (1 << firstbit);
-                    unsigned char* table = this->decode[channel_index].pointers[firstbit];
-                    for (int j = 0; j < (1 << (table_lengths[firstbit] - code_lengths[i])); ++j) {
-                        (&table[1 + (val >> table[0])])[j] = static_cast<unsigned char>(i);
-                    }
-                }
-            }
-        }
-
-#if 1
-        // TODO: Remove this information dump.
-        switch (this->mode) {
-            case tables::modes::yuv_classic: {
-                std::fprintf(stderr, "Mode:       yuv_classic\n");
-            } break;
-            case tables::modes::yuv_prediction_left: {
-                std::fprintf(stderr, "Mode:       yuv_prediction_left\n");
-            } break;
-            case tables::modes::yuv_prediction_gradient: {
-                std::fprintf(stderr, "Mode:       yuv_prediction_gradient\n");
-            } break;
-            case tables::modes::yuv_prediction_median: {
-                std::fprintf(stderr, "Mode:       yuv_prediction_median\n");
-            } break;
-            case tables::modes::rgb_classic: {
-                std::fprintf(stderr, "Mode:       rgb_classic\n");
-            } break;
-            case tables::modes::rgb_prediction_left: {
-                std::fprintf(stderr, "Mode:       rgb_prediction_left\n");
-            } break;
-            case tables::modes::rgb_prediction_left_decorrelate: {
-                std::fprintf(stderr, "Mode:       rgb_prediction_left_decorrelate\n");
-            } break;
-            case tables::modes::rgb_prediction_gradient_decorrelate: {
-                std::fprintf(stderr, "Mode:       rgb_prediction_gradient_decorrelate\n");
-            } break;
-        }
-        std::fprintf(stderr, "Interlaced: %d\n", this->interlaced);
-        std::fprintf(stderr, "SRC bits:   %d\n", this->bit_count);
-        std::fprintf(stderr, "DST bits:   %d\n", strf.bit_count);
-        std::fprintf(stderr, "Width:      %d\n", strf.width);
-        std::fprintf(stderr, "Height:     %d\n", strf.height);
-#endif
-
-        // Compute decompression parameters.
-        unsigned long long int decompressed_image_size = static_cast<unsigned long long int>(strf.width * strf.height * (this->bit_count / 8));
-
-        // Allocate uncompressed frame storage.
-        this->frames_uncompressed.reserve(this->video.get_frames().size());
-
-        // Begin decompression.
-        switch (this->mode) {
-            // YUV2 and UYVY 4:2:2 Formats, 16 bits per pixel.
-            case tables::modes::yuv_classic:
-            case tables::modes::yuv_prediction_left: {
-                if (this->bit_count != 16) {
-                    std::fprintf(stderr, "Error: Unsupported bit count for yuv modes.\n");
-                    return false;
-                }
-                for (const avi::frame_type& frame : this->video.get_frames()[stream_number]) {
-                    this->frames_uncompressed.push_back({std::vector<unsigned char>(decompressed_image_size, 0)});
-                    // Note: Data is in Y U Y V order.
-                    const tables::decode_table_type* tables[4] = {
-                        &decode[0], &decode[1], &decode[0], &decode[2]
-                    };
-                    if (!decode_hfyu(frame.data.data(), frame.data.size(), this->frames_uncompressed.back().data.data(), &tables[0])) {
-                        return false;
-                    }
-                    // Note: Predictor values start from the second Y.
-                    unsigned char predictor_values[3] = {
-                        this->frames_uncompressed.back().data[2],
-                        this->frames_uncompressed.back().data[1],
-                        this->frames_uncompressed.back().data[3]
-                    };
-                    // Note: Predictors are in Y U Y V order.
-                    unsigned char* predictors[4] = {
-                        &predictor_values[0], &predictor_values[1], &predictor_values[0], &predictor_values[2]
-                    };
-                    unpredict_left(this->frames_uncompressed.back().data.data(), this->frames_uncompressed.back().data.data(), &predictors[0]);
-                }
-            } break;
-            case tables::modes::yuv_prediction_gradient: {
-                if (this->bit_count != 16) {
-                    std::fprintf(stderr, "Error: Unsupported bit count for yuv modes.\n");
-                    return false;
-                }
-                for (const avi::frame_type& frame : this->video.get_frames()[stream_number]) {
-                    this->frames_uncompressed.push_back({std::vector<unsigned char>(decompressed_image_size, 0)});
-                    // Note: Data is in Y U Y V order.
-                    const tables::decode_table_type* tables[4] = {
-                        &decode[0], &decode[1], &decode[0], &decode[2]
-                    };
-                    if (!decode_hfyu(frame.data.data(), frame.data.size(), this->frames_uncompressed.back().data.data(), &tables[0])) {
-                        return false;
-                    }
-                    // Note: First three predictor values start from the second Y, same as unpredict_left.
-                    unsigned char predictor_values[3] = {
-                        this->frames_uncompressed.back().data[2],
-                        this->frames_uncompressed.back().data[1],
-                        this->frames_uncompressed.back().data[3]
-                    };
-                    // Note: Predictors are in Y U Y V order.
-                    unsigned char* predictors[4] = {
-                        &predictor_values[0], &predictor_values[1], &predictor_values[0], &predictor_values[2]
-                    };
-                    avi::frame_type frame_buffer = this->frames_uncompressed.back();
-                    unpredict_left(frame_buffer.data.data(), this->frames_uncompressed.back().data.data(), &predictors[0]);
-                    unpredict_gradient(this->frames_uncompressed.back().data.data());
-                }
-            } break;
-            case tables::modes::yuv_prediction_median: {
-                if (this->bit_count != 16) {
-                    std::fprintf(stderr, "Error: Unsupported bit count for yuv modes.\n");
-                    return false;
-                }
-                for (const avi::frame_type& frame : this->video.get_frames()[stream_number]) {
-                    this->frames_uncompressed.push_back({std::vector<unsigned char>(decompressed_image_size, 0)});
-                    // Note: Data is in Y U Y V order.
-                    const tables::decode_table_type* tables[4] = {
-                        &decode[0], &decode[1], &decode[0], &decode[2]
-                    };
-                    if (!decode_hfyu(frame.data.data(), frame.data.size(), this->frames_uncompressed.back().data.data(), &tables[0])) {
-                        return false;
-                    }
-                    // Note: Predictor values start from the second Y.
-                    unsigned char predictor_values[3] = {
-                        this->frames_uncompressed.back().data[2],
-                        this->frames_uncompressed.back().data[1],
-                        this->frames_uncompressed.back().data[3]
-                    };
-                    // Note: Predictors are in Y U Y V order.
-                    unsigned char* predictors[4] = {
-                        &predictor_values[0], &predictor_values[1], &predictor_values[0], &predictor_values[2]
-                    };
-                    avi::frame_type frame_buffer = this->frames_uncompressed.back();
-                    unpredict_median(frame_buffer.data.data(), this->frames_uncompressed.back().data.data(), predictors);
-                }
-            } break;
-            // RGB and RGBA Formats, 24 or 32 bits per pixel.
-            case tables::modes::rgb_classic:
-            case tables::modes::rgb_prediction_left: {
-                if ((this->bit_count != 24) && (this->bit_count != 32)) {
-                    std::fprintf(stderr, "Error: Unsupported bit count for rgb modes.\n");
-                    return false;
-                }
-                for (const avi::frame_type& frame : this->video.get_frames()[stream_number]) {
-                    this->frames_uncompressed.push_back({std::vector<unsigned char>(decompressed_image_size, 0)});
-                    // Note: Data is in B G R A order.
-                    const tables::decode_table_type* tables[4] = {
-                        &decode[0], &decode[1], &decode[2], &decode[2]
-                    };
-                    if (!decode_hfyu(frame.data.data(), frame.data.size(), this->frames_uncompressed.back().data.data(), &tables[0])) {
-                        return false;
-                    }
-                    unsigned char predictor_values[4] = {
-                        this->frames_uncompressed.back().data[0],
-                        this->frames_uncompressed.back().data[1],
-                        this->frames_uncompressed.back().data[2],
-                        this->frames_uncompressed.back().data[3]
-                    };
-                    // Note: Predictors are in B G R A order.
-                    unsigned char* predictors[4] = {
-                        &predictor_values[0], &predictor_values[1], &predictor_values[2], &predictor_values[3]
-                    };
-                    unpredict_left(this->frames_uncompressed.back().data.data(), this->frames_uncompressed.back().data.data(), &predictors[0]);
-                    avi::frame_type frame_buffer = this->frames_uncompressed.back();
-                    flip(frame_buffer.data.data(), this->frames_uncompressed.back().data.data());
-                }
-            } break;
-            case tables::modes::rgb_prediction_left_decorrelate: {
-                if ((this->bit_count != 24) && (this->bit_count != 32)) {
-                    std::fprintf(stderr, "Error: Unsupported bit count for rgb modes.\n");
-                    return false;
-                }
-                for (const avi::frame_type& frame : this->video.get_frames()[stream_number]) {
-                    this->frames_uncompressed.push_back({std::vector<unsigned char>(decompressed_image_size, 0)});
-                    // Note: Data is in G Gb Gr A order, except for the ignored first pixel.
-                    const tables::decode_table_type* tables[4] = {
-                        &decode[1], &decode[0], &decode[2], &decode[2]
-                    };
-                    if (!decode_hfyu(frame.data.data(), frame.data.size(), this->frames_uncompressed.back().data.data(), &tables[0])) {
-                        return false;
-                    }
-                    // Note: First pixel is in B G R A order.
-                    unsigned char predictor_values[4] = {
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[0] - this->frames_uncompressed.back().data[1]),
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[1]),
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[2] - this->frames_uncompressed.back().data[1]),
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[3] - this->frames_uncompressed.back().data[1])
-                    };
-                    // Note: Predictors are in G Gb Gr A order.
-                    unsigned char* predictors[4] = {
-                        &predictor_values[1], &predictor_values[0], &predictor_values[2], &predictor_values[3]
-                    };
-                    unpredict_left(this->frames_uncompressed.back().data.data(), this->frames_uncompressed.back().data.data(), &predictors[0]);
-                    avi::frame_type frame_buffer = this->frames_uncompressed.back();
-                    recorrelate(frame_buffer.data.data(), this->frames_uncompressed.back().data.data());
-                    frame_buffer = this->frames_uncompressed.back();
-                    flip(frame_buffer.data.data(), this->frames_uncompressed.back().data.data());
-                }
-            } break;
-            case tables::modes::rgb_prediction_gradient_decorrelate: {
-                if ((this->bit_count != 24) && (this->bit_count != 32)) {
-                    std::fprintf(stderr, "Error: Unsupported bit count for rgb modes.\n");
-                    return false;
-                }
-                for (const avi::frame_type& frame : this->video.get_frames()[stream_number]) {
-                    this->frames_uncompressed.push_back({std::vector<unsigned char>(decompressed_image_size, 0)});
-                    // Note: Data is in G Gb Gr A order, except for the ignored first pixel.
-                    const tables::decode_table_type* tables[4] = {
-                        &decode[1], &decode[0], &decode[2], &decode[2]
-                    };
-                    if (!decode_hfyu(frame.data.data(), frame.data.size(), this->frames_uncompressed.back().data.data(), &tables[0])) {
-                        return false;
-                    }
-                    // Note: First pixel is in B G R A order.
-                    unsigned char predictor_values[4] = {
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[0] - this->frames_uncompressed.back().data[1]),
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[1]),
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[2] - this->frames_uncompressed.back().data[1]),
-                        static_cast<unsigned char>(this->frames_uncompressed.back().data[3] - this->frames_uncompressed.back().data[1])
-                    };
-                    // Note: Predictors are in G Gb Gr A order.
-                    unsigned char* predictors[4] = {
-                        &predictor_values[1], &predictor_values[0], &predictor_values[2], &predictor_values[3]
-                    };
-                    avi::frame_type frame_buffer = this->frames_uncompressed.back();
-                    unpredict_left(frame_buffer.data.data(), this->frames_uncompressed.back().data.data(), &predictors[0]);
-                    frame_buffer = this->frames_uncompressed.back();
-                    recorrelate(frame_buffer.data.data(), this->frames_uncompressed.back().data.data());
-                    unpredict_gradient(this->frames_uncompressed.back().data.data());
-                    frame_buffer = this->frames_uncompressed.back();
-                    flip(frame_buffer.data.data(), this->frames_uncompressed.back().data.data());
-                }
-            } break;
-        }
-
-        return true;
-    }
-
-public:
-    int get_bit_count() const {
-        return this->bit_count;
-    }
-
-    const avi::strf_vids_type& get_frame_header() const {
-        return this->video.get_strfs()[this->stream_number].strf_vids;
-    }
-
-    const std::vector<avi::frame_type>& get_frames() const {
-        return this->video.get_frames()[this->stream_number];
-    }
-
-    const std::vector<avi::frame_type>& get_frames_uncompressed() const {
-        return this->frames_uncompressed;
-    }
+    bool decorrelated;
+    format_type format;
+    predictor_type predictor;
+    table_type tables[3];
 
 private:
+    constexpr static void copy_bytes(const void* source, void* destination, unsigned int length) {
+        const unsigned char* data_source = static_cast<const unsigned char*>(source);
+        unsigned char* data_destination = static_cast<unsigned char*>(destination);
+        while (length--) {
+            *data_destination++ = *data_source++;
+        }
+    }
+
     constexpr static int find_most_significant_bit_index(unsigned int value) {
         for (int index = 31; index >= 0; --index) {
             if ((value & 0x80000000) != 0) {
@@ -1398,16 +782,695 @@ private:
         return -1;
     }
 
+public:
+    huffyuv(
+        const unsigned char* stream_header_data,
+        unsigned long long int stream_header_length,
+        bool ignore_interlaced_flag = false
+    )
+        : valid(false)
+    {
+        if ((stream_header_data == nullptr) || (stream_header_length < 40)) {
+            std::fprintf(stderr, "Error: Invalid stream header.\n");
+            return;
+        }
+
+        unsigned int header_length = 0;
+        copy_bytes(&stream_header_data[0], &header_length, 4);
+        if (header_length != stream_header_length) {
+            std::fprintf(stderr, "Error: Invalid stream header length.\n");
+            return;
+        }
+
+        copy_bytes(&stream_header_data[4], &this->width, 4);
+        copy_bytes(&stream_header_data[8], &this->height, 4);
+
+        if ((this->width <= 0) || (this->height <= 0)) {
+            std::fprintf(stderr, "Error: Invalid stream dimensions.\n");
+            return;
+        }
+
+        this->interlaced = (this->height > huffyuv::interlaced_threshold);
+        this->decorrelated = false;
+
+        unsigned short bit_count = 0;
+        copy_bytes(&stream_header_data[14], &bit_count, 2);
+
+        // Version 1:
+
+        // If the stream header is only 40 bytes the builtin tables are used.
+        if (stream_header_length == 40) {
+            // Extract the bit count from the stream header.
+            switch (bit_count & ~0x0007) {
+                case 32: {
+                    this->format = format_type::bgra;
+                } break;
+                case 24: {
+                    this->format = format_type::bgr;
+                } break;
+                case 16: {
+                    this->format = format_type::yuyv;
+                } break;
+                default: {
+                    std::fprintf(stderr, "Error: Invalid stream format.\n");
+                    return;
+                }
+            }
+
+            // The builtin tables use the classic predictor.
+            this->predictor = predictor_type::classic;
+
+            if (!this->prepare_tables(nullptr, 0)) {
+                std::fprintf(stderr, "Error: Failed to decode tables.\n");
+                return;
+            }
+
+            this->valid = true;
+            return;
+        }
+
+        // Version 2:
+
+        // If the stream header is larger than 40 bytes the tables are stored in the stream header.
+        // If the bit count low bits are not zero there is no extra configuration, just the the tables.
+        if ((bit_count & 0x0007) != 0) {
+
+            // Extract the format from the bit count high bits.
+            switch (bit_count & ~0x0007) {
+                case 32: {
+                    this->format = format_type::bgra;
+                } break;
+                case 24: {
+                    this->format = format_type::bgr;
+                } break;
+                case 16: {
+                    this->format = format_type::yuyv;
+                } break;
+                default: {
+                    std::fprintf(stderr, "Error: Invalid stream format.\n");
+                    return;
+                }
+            }
+
+            // Extract the prediction mode from the bit count low bits.
+            switch (bit_count & 0x0007) {
+                case 1: {
+                    this->predictor = predictor_type::left;
+                    this->decorrelated = false;
+                } break;
+                case 2: {
+                    this->predictor = predictor_type::left;
+                    this->decorrelated = true;
+                } break;
+                case 3: {
+                    this->predictor = predictor_type::gradient;
+                    this->decorrelated = true;
+                } break;
+                case 4: {
+                    this->predictor = predictor_type::median;
+                    this->decorrelated = true;
+                } break;
+                default: {
+                    std::fprintf(stderr, "Error: Invalid stream predictor.\n");
+                    return;
+                }
+            }
+
+            if (!this->prepare_tables(&stream_header_data[40], stream_header_length - 40)) {
+                std::fprintf(stderr, "Error: Failed to decode tables.\n");
+                return;
+            }
+
+            this->valid = true;
+            return;
+        }
+
+        // Version 3:
+
+        // The stream header contains four bytes of extra configuration and then the tables.
+
+        // Validate the stream header length covers the additional configuration at minimum.
+        if (stream_header_length < 44) {
+            std::fprintf(stderr, "Error: Missing additional configuration parameters in stream header.\n");
+            return;
+        }
+
+        // Extract the bit count from the extra configuration.
+        bit_count = stream_header_data[41];
+        if ((bit_count & 0x0007) != 0) {
+            std::fprintf(stderr, "Error: Invalid additional configuration parameters in stream header.\n");
+            return;
+        }
+
+        // Extract the format from the bit count.
+        switch (bit_count & ~0x0007) {
+            case 32: {
+                this->format = format_type::bgra;
+            } break;
+            case 24: {
+                this->format = format_type::bgr;
+            } break;
+            case 16: {
+                this->format = format_type::yuyv;
+            } break;
+            default: {
+                std::fprintf(stderr, "Error: Invalid bit count in stream header extradata.\n");
+                return;
+            }
+        }
+
+        // Extract the prediction mode from the extra configuration.
+        switch (stream_header_data[40] & 0x07) {
+            default:
+            case 0: {
+                this->predictor = predictor_type::left;
+            } break;
+            case 1: {
+                this->predictor = predictor_type::gradient;
+            } break;
+            case 2: {
+                this->predictor = predictor_type::median;
+            } break;
+        }
+
+        // Extract whether the data is decorrelated from the extra configuration.
+        this->decorrelated = stream_header_data[40] & 0x40;
+
+        // If we are not ignoring the interlaced flag.
+        if (!ignore_interlaced_flag) {
+            // If the flag is set to interlaced, override the interlaced boolean.
+            if (((stream_header_data[42] >> 4) & 0x0F) == 0x01) {
+                this->interlaced = true;
+            }
+            // If the flag is set to progressive, override the interlaced boolean.
+            else if (((stream_header_data[42] >> 4) & 0x0F) == 0x02) {
+                this->interlaced = false;
+            }
+            // Otherwise leave it as it was.
+        }
+
+        // unsigned char unused = stream_header_data[43];
+
+        if (!this->prepare_tables(&stream_header_data[44], stream_header_length - 44)) {
+            std::fprintf(stderr, "Error: Failed to decode tables.\n");
+            return;
+        }
+
+        this->valid = true;
+    }
+
+public:
+    huffyuv(
+        int stream_width,
+        int stream_height,
+        bool stream_interlaced,
+        bool stream_decorrelated,
+        format_type stream_format,
+        predictor_type stream_predictor,
+        const unsigned char* table_data = nullptr,
+        unsigned long long int table_length = 0
+    )
+        : valid(false)
+        , width(stream_width)
+        , height(stream_height)
+        , interlaced(stream_interlaced)
+        , decorrelated(stream_decorrelated)
+        , format(stream_format)
+        , predictor(stream_predictor)
+    {
+        if ((this->width <= 0) || (this->height <= 0)) {
+            std::fprintf(stderr, "Error: Invalid dimensions.\n");
+            return;
+        }
+        if ((stream_format == format_type::yuyv) && (stream_decorrelated)) {
+            std::fprintf(stderr, "Error: Invalid settings, YUV formats cannot be decorrelated.\n");
+            return;
+        }
+        if ((stream_format == format_type::bgr) && (stream_predictor == predictor_type::gradient) && (!stream_decorrelated)) {
+            std::fprintf(stderr, "Error: Invalid settings, BGR formats must be decorrelated when using the gradient predictor.\n");
+            return;
+        }
+        if ((stream_format == format_type::bgra) && (stream_predictor == predictor_type::gradient) && (!stream_decorrelated)) {
+            std::fprintf(stderr, "Error: Invalid settings, BGRA formats must be decorrelated when using the gradient predictor.\n");
+            return;
+        }
+        if ((stream_format == format_type::bgr) && (stream_predictor == predictor_type::median)) {
+            std::fprintf(stderr, "Error: Invalid settings, BGR formats cannot use the median predictor.\n");
+            return;
+        }
+        if ((stream_format == format_type::bgra) && (stream_predictor == predictor_type::median)) {
+            std::fprintf(stderr, "Error: Invalid settings, BGRA formats cannot use the median predictor.\n");
+            return;
+        }
+        if (!this->prepare_tables(table_data, table_length)) {
+            std::fprintf(stderr, "Error: Failed to decode tables.\n");
+            return;
+        }
+        this->valid = true;
+    }
+
 private:
+    bool prepare_tables(
+        const unsigned char* table_data,
+        unsigned long long int table_length
+    ) {
+        // Check if table data was not found, if not use the builtin data.
+        if ((table_data == nullptr) || (table_length == 0)) {
+            switch (this->format) {
+                case format_type::yuyv: {
+                    switch (this->predictor) {
+                        case predictor_type::classic: {
+                            copy_bytes(builtin_tables::yuv::classic::shift_y, this->tables[0].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::classic::shift_u, this->tables[1].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::classic::shift_v, this->tables[2].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::classic::add_shifted_y, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::classic::add_shifted_u, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::classic::add_shifted_v, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                        } break;
+                        case predictor_type::left: {
+                            copy_bytes(builtin_tables::yuv::left::shift_y, this->tables[0].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::left::shift_u, this->tables[1].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::left::shift_v, this->tables[2].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::left::add_shifted_y, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::left::add_shifted_u, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::left::add_shifted_v, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                        } break;
+                        case predictor_type::gradient: {
+                            copy_bytes(builtin_tables::yuv::gradient::shift_y, this->tables[0].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::gradient::shift_u, this->tables[1].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::gradient::shift_v, this->tables[2].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::gradient::add_shifted_y, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::gradient::add_shifted_u, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::gradient::add_shifted_v, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                        } break;
+                        case predictor_type::median: {
+                            copy_bytes(builtin_tables::yuv::median::shift_y, this->tables[0].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::median::shift_u, this->tables[1].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::median::shift_v, this->tables[2].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::yuv::median::add_shifted_y, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::median::add_shifted_u, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::yuv::median::add_shifted_v, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                        } break;
+                    }
+                } break;
+                case format_type::bgr:
+                case format_type::bgra: {
+                    switch (this->predictor) {
+                        case predictor_type::classic: {
+                            copy_bytes(builtin_tables::rgb::classic::shift_b, this->tables[0].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::rgb::classic::shift_g, this->tables[1].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::rgb::classic::shift_r, this->tables[2].shift, 256 * sizeof(unsigned char));
+                            copy_bytes(builtin_tables::rgb::classic::add_shifted_b, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::rgb::classic::add_shifted_g, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                            copy_bytes(builtin_tables::rgb::classic::add_shifted_r, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                        } break;
+                        case predictor_type::left: {
+                            if (!this->decorrelated) {
+                                copy_bytes(builtin_tables::rgb::left::shift_b, this->tables[0].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::left::shift_g, this->tables[1].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::left::shift_r, this->tables[2].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::left::add_shifted_b, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                                copy_bytes(builtin_tables::rgb::left::add_shifted_g, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                                copy_bytes(builtin_tables::rgb::left::add_shifted_r, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                            }
+                            else {
+                                copy_bytes(builtin_tables::rgb::left_decorrelate::shift_bg, this->tables[0].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::left_decorrelate::shift_g, this->tables[1].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::left_decorrelate::shift_rg, this->tables[2].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::left_decorrelate::add_shifted_bg, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                                copy_bytes(builtin_tables::rgb::left_decorrelate::add_shifted_g, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                                copy_bytes(builtin_tables::rgb::left_decorrelate::add_shifted_rg, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                            }
+                        } break;
+                        case predictor_type::gradient: {
+                            if (!this->decorrelated) {
+                                return false;
+                            }
+                            else {
+                                copy_bytes(builtin_tables::rgb::gradient_decorrelate::shift_bg, this->tables[0].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::gradient_decorrelate::shift_g, this->tables[1].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::gradient_decorrelate::shift_rg, this->tables[2].shift, 256 * sizeof(unsigned char));
+                                copy_bytes(builtin_tables::rgb::gradient_decorrelate::add_shifted_bg, this->tables[0].add_shifted, 256 * sizeof(unsigned int));
+                                copy_bytes(builtin_tables::rgb::gradient_decorrelate::add_shifted_g, this->tables[1].add_shifted, 256 * sizeof(unsigned int));
+                                copy_bytes(builtin_tables::rgb::gradient_decorrelate::add_shifted_rg, this->tables[2].add_shifted, 256 * sizeof(unsigned int));
+                            }
+                        } break;
+                        case predictor_type::median: {
+                            return false;
+                        } break;
+                    }
+                } break;
+            }
+        }
+        // Otherwise table data was found in the stream header.
+        else {
+            // Decompress runlength encoded table data of bit lengths per code.
+            // Stored in these orders:
+            //  - YUV: Y table, U table, V table
+            //  - RGB (correlated): B table, G table, R table
+            //  - RGB (decorrelated): B-G table, G table, R-G table
+            // Note: For RGBA data the R or R-G table is used for the alpha channel.
+            {
+                unsigned int data_index = 0;
+                for (int channel_index = 0; channel_index < 3; ++channel_index) {
+                    int table_index = 0;
+                    do {
+                        if (data_index >= table_length) {
+                            std::fprintf(stderr, "Error: Invalid table in stream header, insufficient data.\n");
+                            return false;
+                        }
+                        const unsigned char value = table_data[data_index] & 0x1F;
+                        int repetitions = table_data[data_index++] >> 5;
+                        if (repetitions == 0) {
+                            if (data_index >= table_length) {
+                                std::fprintf(stderr, "Error: Invalid table in stream header, insufficient data after zero repetitions flag.\n");
+                                return false;
+                            }
+                            repetitions = table_data[data_index++];
+                            if (repetitions == 0) {
+                                std::fprintf(stderr, "Error: Invalid table in stream header, zero repetitions.\n");
+                                return false;
+                            }
+                        }
+                        if (table_index + repetitions > 256) {
+                            std::fprintf(stderr, "Error: Invalid table in stream header, invalid runlength encoding.\n");
+                            return false;
+                        }
+                        while (repetitions--) {
+                            this->tables[channel_index].shift[table_index++] = value;
+                        }
+                    } while (table_index < 256);
+                }
+                // Should be at least one null byte at the end.
+                if (data_index == table_length) {
+                    std::fprintf(stderr, "Error: Invalid table in stream header, missing null byte.\n");
+                    return false;
+                }
+                if (table_data[data_index] != 0x00) {
+                    std::fprintf(stderr, "Error: Invalid table in stream header, invalid null byte.\n");
+                    return false;
+                }
+            }
+
+            // Calculate the add shifted tables.
+            for (int channel_index = 0; channel_index < 3; ++channel_index) {
+                int min_bits_processed = 32;
+                unsigned int bits = 0;
+                do {
+                    int max_bits_pending = 0;
+                    for (int i = 0; i < 256; ++i) {
+                        if ((this->tables[channel_index].shift[i] < min_bits_processed) && (this->tables[channel_index].shift[i] > max_bits_pending)) {
+                            max_bits_pending = this->tables[channel_index].shift[i];
+                        }
+                    }
+                    const unsigned int bit = 1 << (32 - max_bits_pending);
+                    if (bits & (bit - 1)) {
+                        std::fprintf(stderr, "Error: Invalid table in stream header.\n");
+                        return false;
+                    }
+                    for (int i = 0; i < 256; ++i) {
+                        if (this->tables[channel_index].shift[i] == max_bits_pending) {
+                            this->tables[channel_index].add_shifted[i] = bits;
+                            bits += bit;
+                        }
+                    }
+                    min_bits_processed = max_bits_pending;
+                } while (bits & 0xFFFFFFFF);
+            }
+        }
+
+        // Compute the huffyuv tables from the table data.
+        for (int channel_index = 0; channel_index < 3; ++channel_index) {
+            int code_lengths[256] = {};
+            int code_firstbits[256] = {};
+            int table_lengths[32];
+            for (int i = 0; i < 32; ++i) {
+                table_lengths[i] = -1;
+            }
+            int all_zero_code = -1;
+            for (int i = 0; i < 256; ++i) {
+                if (this->tables[channel_index].add_shifted[i] != 0) {
+                    for (int firstbit = 31; firstbit >= 0; --firstbit) {
+                        if (this->tables[channel_index].add_shifted[i] & (1 << firstbit)) {
+                            code_firstbits[i] = firstbit;
+                            const int code_length = this->tables[channel_index].shift[i] - (32 - firstbit);
+                            code_lengths[i] = code_length;
+                            table_lengths[firstbit] = static_cast<int>(table_lengths[firstbit]) > code_length ? static_cast<int>(table_lengths[firstbit]) : code_length;
+                            break;
+                        }
+                    }
+                } else {
+                    all_zero_code = i;
+                }
+            }
+            if (all_zero_code < 0) {
+                std::fprintf(stderr, "Error: Failed to find all zero code in table.\n");
+                return false;
+            }
+            unsigned char* p = this->tables[channel_index].data;
+            *p++ = 31;
+            *p++ = static_cast<unsigned char>(all_zero_code);
+            for (int i = 0; i < 32; ++i) {
+                if (table_lengths[i] == -1) {
+                    this->tables[channel_index].pointers[i] = this->tables[channel_index].data;
+                } else {
+                    this->tables[channel_index].pointers[i] = p;
+                    *p++ = static_cast<unsigned char>(i - table_lengths[i]);
+                    p += 1 << table_lengths[i];
+                }
+            }
+            for (int i = 0; i < 256; ++i) {
+                if (this->tables[channel_index].add_shifted[i]) {
+                    int firstbit = code_firstbits[i];
+                    int val = static_cast<int>(this->tables[channel_index].add_shifted[i]) - (1 << firstbit);
+                    unsigned char* table = this->tables[channel_index].pointers[firstbit];
+                    for (int j = 0; j < (1 << (table_lengths[firstbit] - code_lengths[i])); ++j) {
+                        (&table[1 + (val >> table[0])])[j] = static_cast<unsigned char>(i);
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool generate_stream_header(
+        const unsigned char* stream_header_data,
+        unsigned long long int& stream_header_length
+    ) {
+        if ((stream_header_data == nullptr) || (stream_header_length == 0)) {
+            return false;
+        }
+
+        // Generate the stream header.
+        // TODO: ...
+
+        return true;
+    }
+
+public:
+    bool is_valid() const {
+        return this->valid;
+    }
+
+    int get_image_width() const {
+        if (!this->is_valid()) {
+            return 0;
+        }
+        return this->width;
+    }
+
+    int get_image_height() const {
+        if (!this->is_valid()) {
+            return 0;
+        }
+        return this->height;
+    }
+
+    format_type get_image_format() const {
+        if (!this->is_valid()) {
+            return format_type::yuyv;
+        }
+        return this->format;
+    }
+
+    predictor_type get_image_predictor() const {
+        if (!this->is_valid()) {
+            return predictor_type::classic;
+        }
+        return this->predictor;
+    }
+
+    unsigned long long int get_decoded_image_size() const {
+        if (!this->is_valid()) {
+            return 0;
+        }
+        unsigned int channel_bytes = 0;
+        switch (this->format) {
+            case format_type::yuyv: {
+                channel_bytes = 2;
+            } break;
+            case format_type::bgr: {
+                channel_bytes = 3;
+            } break;
+            case format_type::bgra: {
+                channel_bytes = 4;
+            } break;
+        }
+        return this->height * this->width * channel_bytes;
+    }
+
+public:
+    bool encode(
+        const unsigned char* decoded_data,
+        unsigned long long int decoded_length,
+        unsigned char* encoded_data,
+        unsigned long long int& encoded_length
+    ) const {
+        if (!this->is_valid()) {
+            return false;
+        }
+        // TODO: ...
+        static_cast<void>(decoded_data);
+        static_cast<void>(decoded_length);
+        static_cast<void>(encoded_data);
+        static_cast<void>(encoded_length);
+        return false;
+    }
+
+    bool decode(
+        const unsigned char* encoded_data,
+        unsigned long long int encoded_length,
+        unsigned char* decoded_data,
+        unsigned long long int& decoded_length
+    ) const {
+        if (!this->is_valid()) {
+            return false;
+        }
+        if ((encoded_data == nullptr) || (encoded_length == 0) || (decoded_data == nullptr) || (decoded_length < this->get_decoded_image_size())) {
+            return false;
+        }
+
+        switch (this->format) {
+            case format_type::yuyv: {
+                // Note: Data is in Y U Y V order.
+                const table_type* channel_tables[4] = {
+                    &this->tables[0], &this->tables[1], &this->tables[0], &this->tables[2]
+                };
+                if (!decode_hfyu(encoded_data, encoded_length, decoded_data, &channel_tables[0])) {
+                    std::fprintf(stderr, "Error: Failed to decode hfyu data.\n");
+                    return false;
+                }
+                // Note: Predictor values start from the second Y.
+                unsigned char predictor_values[3] = {
+                    decoded_data[2], decoded_data[1], decoded_data[3]
+                };
+                // Note: Predictors are in Y U Y V order.
+                unsigned char* predictors[4] = {
+                    &predictor_values[0], &predictor_values[1], &predictor_values[0], &predictor_values[2]
+                };
+                switch (this->predictor) {
+                    case predictor_type::classic:
+                    case predictor_type::left: {
+                        unpredict_left(decoded_data, &predictors[0]);
+                    } break;
+                    case predictor_type::gradient: {
+                        unpredict_left(decoded_data, &predictors[0]);
+                        unpredict_gradient(decoded_data);
+                    } break;
+                    case predictor_type::median: {
+                        unpredict_median(decoded_data, &predictors[0]);
+                    } break;
+                }
+                decoded_length = this->get_decoded_image_size();
+            } break;
+
+            case format_type::bgr:
+            case format_type::bgra: {
+                // Note: Data is in B G R (A) order.
+                const table_type* channel_tables[4] = {
+                    &this->tables[0], &this->tables[1], &this->tables[2], &this->tables[2]
+                };
+                if (this->decorrelated) {
+                    // Note: When decorrelated data is in G B-G R-G (A) order, except for the first pixel.
+                    const table_type* temp = channel_tables[0];
+                    channel_tables[0] = channel_tables[1];
+                    channel_tables[1] = temp;
+                }
+                if (!decode_hfyu(encoded_data, encoded_length, decoded_data, &channel_tables[0])) {
+                    return false;
+                }
+                // Note: First pixel is in B G R (A) order.
+                unsigned char predictor_values[4] = {
+                    decoded_data[0], decoded_data[1], decoded_data[2], decoded_data[3]
+                };
+                if (this->decorrelated) {
+                    // Note: When decorrelated have to subtract G from the other channels.
+                    predictor_values[0] -= predictor_values[1];
+                    predictor_values[2] -= predictor_values[1];
+                    predictor_values[3] -= predictor_values[1];
+                }
+                // Note: Predictors are in B G R (A) order.
+                unsigned char* predictors[4] = {
+                    &predictor_values[0], &predictor_values[1], &predictor_values[2], &predictor_values[3]
+                };
+                if (this->decorrelated) {
+                    // Note: When decorrelated predictors are in G B-G R-G (A) order.
+                    unsigned char* temp = predictors[0];
+                    predictors[0] = predictors[1];
+                    predictors[1] = temp;
+                }
+                switch (this->predictor) {
+                    case predictor_type::classic:
+                    case predictor_type::left: {
+                        unpredict_left(decoded_data, &predictors[0]);
+                        if (this->decorrelated) {
+                            recorrelate(decoded_data);
+                        }
+                    } break;
+                    case predictor_type::gradient: {
+                        unpredict_left(decoded_data, &predictors[0]);
+                        if (this->decorrelated) {
+                            recorrelate(decoded_data);
+                        }
+                        unpredict_gradient(decoded_data);
+                    } break;
+                    case predictor_type::median: {
+                        return false;
+                    } break;
+                }
+                flip(decoded_data);
+                decoded_length = this->get_decoded_image_size();
+            } break;
+        }
+
+        return true;
+    }
+
+private:
+    bool encode_hfyu(
+        const unsigned char* decompressed,
+        unsigned char* compressed,
+        size_t& compressed_size,
+        const table_type** channel_tables
+    ) const {
+        // TODO: ...
+        static_cast<void>(decompressed);
+        static_cast<void>(compressed);
+        static_cast<void>(compressed_size);
+        static_cast<void>(channel_tables);
+        return false;
+    }
+
     bool decode_hfyu(
         const unsigned char* compressed,
         size_t compressed_size,
         unsigned char* decompressed,
-        const tables::decode_table_type** tables
+        const table_type** channel_tables
     ) const {
-        const int width = (this->bit_count / 8) == 2 ? this->get_frame_header().width / 2 : this->get_frame_header().width;
-        const int height = this->get_frame_header().height;
-        const int channels = (this->bit_count / 8) == 2 ? 4 : (this->bit_count / 8);
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
 
         unsigned int stream_index = 0;
         for (int y = 0; y < height; ++y) {
@@ -1416,7 +1479,7 @@ private:
                 if ((y == 0) && (x == 0)) {
                     // For rgb streams there is still fours bytes for the first pixel so the first byte is dropped.
                     // Note: This is achieved by using a boolean test cast to int as the first channel index and always interating to 4.
-                    for (int channel = ((this->bit_count / 8) == 3); channel < 4; ++channel) {
+                    for (int channel = (this->format == format_type::bgr); channel < 4; ++channel) {
                         *decompressed++ = compressed[channel];
                     }
                     stream_index += 32;
@@ -1465,8 +1528,8 @@ private:
                     // Find the index of the most significant bit, ensure an index is found by bitwise ORing the least significant bit.
                     const int tree_index = find_most_significant_bit_index(code | 1);
 
-                    const unsigned char decoded = *(tables[channel]->pointers[tree_index] + ((code & ~(1u << tree_index)) >> tables[channel]->pointers[tree_index][0]) + 1);
-                    const unsigned int advance = *(tables[channel]->shift.data + decoded);
+                    const unsigned char decoded = channel_tables[channel]->pointers[tree_index][((code & ~(1u << tree_index)) >> channel_tables[channel]->pointers[tree_index][0]) + 1];
+                    const unsigned int advance = channel_tables[channel]->shift[decoded];
 
                     if (advance == 0) {
                         fprintf(stderr, "Invalid compressed frame, failed to advance. [%d, %d][%d]\n", x, y, channel);
@@ -1481,52 +1544,73 @@ private:
         return true;
     }
 
-    void unpredict_left(
-        const unsigned char* predicted,
-        unsigned char* actual,
+    void predict_left(
+        unsigned char* frame,
         unsigned char** predictors
     ) const {
-        const int width = ((this->bit_count / 8) == 2) ? (this->get_frame_header().width / 2) : this->get_frame_header().width;
-        const int height = this->get_frame_header().height;
-        const int channels = ((this->bit_count / 8) == 2) ? 4 : (this->bit_count / 8);
+        // TODO: ...
+        static_cast<void>(frame);
+        static_cast<void>(predictors);
+    }
+
+    void unpredict_left(
+        unsigned char* frame,
+        unsigned char** predictors
+    ) const {
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
 
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 if ((y == 0) && (x == 0)) {
-                    for (int channel = 0; channel < channels; ++channel) {
-                        *actual++ = *predicted++;
-                    }
+                    frame += channels;
                     continue;
                 }
                 for (int channel = 0; channel < channels; ++channel) {
-                    *(predictors[channel]) += *predicted++;
-                    *actual++ = *(predictors[channel]);
+                    *(predictors[channel]) += *frame;
+                    *frame++ = *(predictors[channel]);
                 }
             }
         }
+    }
+
+    void predict_gradient(
+        unsigned char* frame
+    ) const {
+        // TODO: ...
+        static_cast<void>(frame);
     }
 
     void unpredict_gradient(
-        unsigned char* image
+        unsigned char* frame
     ) const {
-        const int width = ((this->bit_count / 8) == 2) ? (this->get_frame_header().width / 2) : this->get_frame_header().width;
-        const int height = this->get_frame_header().height;
-        const int channels = ((this->bit_count / 8) == 2) ? 4 : (this->bit_count / 8);
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
 
-        image += (channels * width * (1 + this->interlaced));
+        frame += (channels * width * (1 + this->interlaced));
         for (int y = (1 + this->interlaced); y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 for (int channel = 0; channel < channels; ++channel) {
-                    *image += *(image - (channels * width * (1 + this->interlaced)));
-                    ++image;
+                    *frame += *(frame - (channels * width * (1 + this->interlaced)));
+                    ++frame;
                 }
             }
         }
     }
 
+    void predict_median(
+        unsigned char* frame,
+        unsigned char** predictors
+    ) const {
+        // TODO: ...
+        static_cast<void>(frame);
+        static_cast<void>(predictors);
+    }
+
     void unpredict_median(
-        const unsigned char* predicted,
-        unsigned char* actual,
+        unsigned char* frame,
         unsigned char** predictors
     ) const {
         constexpr static const auto median = [](unsigned char value0, unsigned char value1, unsigned char value2) {
@@ -1536,92 +1620,119 @@ private:
             return value1;
         };
 
-        const int width = ((this->bit_count / 8) == 2) ? (this->get_frame_header().width / 2) : this->get_frame_header().width;
-        const int height = this->get_frame_header().height;
-        const int channels = ((this->bit_count / 8) == 2) ? 4 : (this->bit_count / 8);
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
 
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 if ((y == 0) && (x == 0)) {
-                    for (int channel = 0; channel < channels; ++channel) {
-                        *actual++ = *predicted++;
-                    }
+                    frame += channels;
                     continue;
                 }
                 // First row(s) is/are predict left.
                 if (y < (1 + this->interlaced)) {
                     for (int channel = 0; channel < channels; ++channel) {
-                        *(predictors[channel]) += *predicted++;
-                        *actual++ = *(predictors[channel]);
+                        *(predictors[channel]) += *frame;
+                        *frame++ = *(predictors[channel]);
                     }
                     continue;
                 }
                 // First four pixels of next row are also predict left.
                 if ((y == (1 + this->interlaced)) && (x < 2)) {
                     for (int channel = 0; channel < channels; ++channel) {
-                        *(predictors[channel]) += *predicted++;
-                        *actual++ = *(predictors[channel]);
+                        *(predictors[channel]) += *frame;
+                        *frame++ = *(predictors[channel]);
                     }
                     continue;
                 }
                 // Remainder are predicted from the median.
                 for (int channel = 0; channel < channels; ++channel) {
-                    const int channel_jump = ((this->bit_count / 8) != 2) ? (channels) : ((channel % 2 == 0) ? (2) : (4));
-                    const unsigned char pixel_left = *(actual - channel_jump);
-                    const unsigned char pixel_above = *(actual - (width * channels));
-                    const unsigned char pixel_above_left = *(actual - (width * channels) - channel_jump);
-                    *actual++ = *predicted++ + median(pixel_left, pixel_above, pixel_left + pixel_above - pixel_above_left);
+                    const int channel_jump = (this->format != format_type::yuyv) ? (channels) : ((channel % 2 == 0) ? (2) : (4));
+                    const unsigned char pixel_left = *(frame - channel_jump);
+                    const unsigned char pixel_above = *(frame - (width * channels));
+                    const unsigned char pixel_above_left = *(frame - (width * channels) - channel_jump);
+                    *frame += median(pixel_left, pixel_above, pixel_left + pixel_above - pixel_above_left);
+                    ++frame;
+                }
+            }
+        }
+    }
+
+    void decorrelate(
+        unsigned char* frame
+    ) const {
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
+
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                // Handle the very first pixel separately, it is stored correlated.
+                if ((y == 0) && (x == 0)) {
+                    frame += channels;
+                    continue;
+                }
+                // Note: The correlated input data is stored in [B, G, R, (A)] order.
+                // Note: The decorreleated output data is stored in [G, B-G, R-G, (A-G)] order.
+                const unsigned char b = frame[0];
+                const unsigned char g = frame[1];
+                const unsigned char r = frame[2];
+                *frame++ = g;
+                *frame++ = b - g;
+                *frame++ = r - g;
+                if (channels == 4) {
+                    const unsigned char a = *frame;
+                    *frame++ += a - g;
                 }
             }
         }
     }
 
     void recorrelate(
-        const unsigned char* decorrelated,
-        unsigned char* correlated
+        unsigned char* frame
     ) const {
-        const int width = ((this->bit_count / 8) == 2) ? (this->get_frame_header().width / 2) : this->get_frame_header().width;
-        const int height = this->get_frame_header().height;
-        const int channels = ((this->bit_count / 8) == 2) ? 4 : (this->bit_count / 8);
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
 
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 // Handle the very first pixel separately, it is stored already correlated.
                 if ((y == 0) && (x == 0)) {
-                    for (int channel = 0; channel < channels; ++channel) {
-                        *correlated++ = *decorrelated++;
-                    }
+                    frame += channels;
                     continue;
                 }
                 // Note: The decorreleated input data is stored in [G, B-G, R-G, (A-G)] order.
                 // Note: The correlated output data is stored in [B, G, R, (A)] order.
-                const unsigned char g = *decorrelated++;
-                const unsigned char b_g = *decorrelated++;
-                const unsigned char r_g = *decorrelated++;
-                *correlated++ = b_g + g;
-                *correlated++ = g;
-                *correlated++ = r_g + g;
+                const unsigned char g = frame[0];
+                const unsigned char b_g = frame[1];
+                const unsigned char r_g = frame[2];
+                *frame++ = b_g + g;
+                *frame++ = g;
+                *frame++ = r_g + g;
                 if (channels == 4) {
-                    const unsigned char a_g = *decorrelated++;
-                    *correlated++ = a_g + g;
+                    const unsigned char a_g = *frame;
+                    *frame++ += a_g + g;
                 }
             }
         }
     }
 
     void flip(
-        const unsigned char* original,
-        unsigned char* flipped
+        unsigned char* frame
     ) const {
-        const int width = ((this->bit_count / 8) == 2) ? (this->get_frame_header().width / 2) : this->get_frame_header().width;
-        const int height = this->get_frame_header().height;
-        const int channels = ((this->bit_count / 8) == 2) ? 4 : (this->bit_count / 8);
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
 
-        flipped += channels * width * (height - 1);
-        for (int y = 0; y < height; ++y) {
+        unsigned char* flipped = frame + channels * width * (height - 1);
+        for (int y = 0; y < height / 2; ++y) {
             for (int x = 0; x < width; ++x) {
                 for (int channel = 0; channel < channels; ++channel) {
-                    *flipped++ = *original++;
+                    unsigned char temp = *flipped;
+                    *flipped++ = *frame;
+                    *frame++ = temp;
                 }
             }
             flipped -= 2 * channels * width;

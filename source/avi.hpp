@@ -11,13 +11,8 @@ private:
         unsigned int identifier;
         // Length of the chunk's data.
         unsigned int length;
-        // Pointer to the chunk's data, note that this includes the form bytes for RIFF and LIST chunks.
-        const unsigned char* data;
-        // RIFF and LIST chunks hold a four letter character code identifying their form as the first four bytes in their data.
-        unsigned int form;
-        // Extracted child chunks within RIFF and LIST chunks.
-        std::vector<chunk_type> children;
     };
+    static_assert(sizeof(chunk_type) == 8);
 
 public:
     // The main avi header.
@@ -124,18 +119,20 @@ public:
         unsigned int colours_used;
         // The number of colour indices in the colour table that are important for displaying the image.
         unsigned int colours_important;
-        // Optional data.
-        std::vector<unsigned char> extradata;
     };
-    static_assert(sizeof(strf_vids_type) == 40 + sizeof(std::vector<unsigned char>));
+    static_assert(sizeof(strf_vids_type) == 40);
 
     struct strf_auds_type {
         // TODO: Currently ignoring audio chunks.
     };
+    static_assert(sizeof(strf_auds_type) == 1);
+
     struct strf_type {
         unsigned int identifier;
-        strf_vids_type strf_vids;
-        strf_auds_type strf_auds;
+        union {
+            const strf_vids_type* strf_vids;
+            const strf_auds_type* strf_auds;
+        };
     };
 
 private:
@@ -153,13 +150,21 @@ private:
 
 public:
     struct frame_type {
-        std::vector<unsigned char> data;
+        const unsigned char* data;
+        unsigned long long int length;
     };
 
 private:
-    chunk_type root_chunk;
-    avih_type avih;
-    std::vector<strh_type> strhs;
+    struct chunk_node_type {
+        const chunk_type* chunk;
+        unsigned int form;
+        std::vector<chunk_node_type> children;
+    };
+
+private:
+    chunk_node_type root_chunk_node;
+    const avih_type* avih;
+    std::vector<const strh_type*> strhs;
     std::vector<strf_type> strfs;
     std::vector<std::vector<frame_type>> frames;
 
@@ -169,12 +174,12 @@ public:
         this->strfs.clear();
         this->frames.clear();
 
-        if (!parse_chunks(&data[0], length, this->root_chunk)) {
+        if (!parse_chunks(&data[0], length, this->root_chunk_node)) {
             std::fprintf(stderr, "Error: Failed to parse root chunk.\n");
             return false;
         }
 
-        if (this->root_chunk.identifier != fourcc("RIFF")) {
+        if (this->root_chunk_node.chunk->identifier != fourcc("RIFF")) {
             std::fprintf(stderr, "Error: Root chunk is not a RIFF chunk.\n");
             return false;
         }
@@ -183,7 +188,7 @@ public:
             return false;
         }
 
-        if (this->avih.stream_count > 255) {
+        if (this->avih->stream_count > 255) {
             std::fprintf(stderr, "Error: Unsupported number of streams found in file.\n");
             return false;
         }
@@ -192,7 +197,7 @@ public:
             return false;
         }
 
-        if ((this->avih.stream_count != this->strhs.size()) || (this->avih.stream_count != this->strfs.size())) {
+        if ((this->avih->stream_count != this->strhs.size()) || (this->avih->stream_count != this->strfs.size())) {
             std::fprintf(stderr, "Error: Incorrect number of streams found in file.\n");
             return false;
         }
@@ -205,11 +210,11 @@ public:
     }
 
 public:
-    const avih_type& get_avih() const {
+    const avih_type* get_avih() const {
         return this->avih;
     }
 
-    const std::vector<strh_type>& get_strhs() const {
+    const std::vector<const strh_type*>& get_strhs() const {
         return this->strhs;
     }
 
@@ -239,36 +244,35 @@ private:
     }
 
 private:
-    static bool parse_chunks(const unsigned char* data, unsigned long long int length, chunk_type& chunk) {
+    static bool parse_chunks(const unsigned char* data, unsigned long long int length, chunk_node_type& node) {
         // Extract chunk header data.
         if (length < 8) {
             return false;
         }
-        copy_bytes(&data[0], &chunk.identifier, 4);
-        copy_bytes(&data[4], &chunk.length, 4);
-        if (chunk.length + 8 > length) {
+        node.chunk = reinterpret_cast<const chunk_type*>(&data[0]);
+        if (node.chunk->length + 8 > length) {
             std::fprintf(stderr, "Error: Chunk length is greater than remaining length.\n");
             return false;
         }
-        chunk.data = &data[8];
+        const unsigned char* chunk_data = &data[8];
         // If chunk is a collection/list, recursively parse more.
-        if ((chunk.identifier == fourcc("RIFF")) || (chunk.identifier == fourcc("LIST"))) {
-            if ((chunk.length < 4) || (length < 12)) {
+        if ((node.chunk->identifier == fourcc("RIFF")) || (node.chunk->identifier == fourcc("LIST"))) {
+            if ((node.chunk->length < 4) || (length < 12)) {
                 std::fprintf(stderr, "Error: Chunk length is too short.\n");
                 return false;
             }
-            copy_bytes(&chunk.data[0], &chunk.form, 4);
+            copy_bytes(&chunk_data[0], &node.form, 4);
             unsigned int index = 4;
-            while ((index < chunk.length) && (index + 8 < length)) {
-                chunk_type child = {};
-                if (!parse_chunks(&chunk.data[index], chunk.length - 4, child)) {
+            while ((index < node.chunk->length) && (index + 8 < length)) {
+                node.children.push_back({});
+                const chunk_node_type& child = node.children.back();
+                if (!parse_chunks(&reinterpret_cast<const unsigned char*>(node.chunk)[sizeof(chunk_type) + index], node.chunk->length - 4, node.children.back())) {
                     std::fprintf(stderr, "Error: Failed to parse chunk.\n");
                     return false;
                 }
-                index += 8 + child.length + (child.length % 2);
-                chunk.children.push_back(std::move(child));
+                index += 8 + child.chunk->length + (child.chunk->length % 2);
             }
-            return (index == chunk.length);
+            return (index == node.chunk->length);
         }
         return true;
     }
@@ -277,66 +281,53 @@ private:
         // RIFF[AVI ]->LIST[hdrl]->avih
 
         // Start at the root chunk.
-        const chunk_type* chunk = &this->root_chunk;
+        const chunk_node_type* node = &this->root_chunk_node;
 
         // Validate.
-        if (chunk->identifier != fourcc("RIFF")) {
+        if (node->chunk->identifier != fourcc("RIFF")) {
             std::fprintf(stderr, "Error: Failed to decode avi header. First chunk is not 'RIFF'.\n");
             return false;
         }
-        if (chunk->form != fourcc("AVI ")) {
+        if (node->form != fourcc("AVI ")) {
             std::fprintf(stderr, "Error: Failed to decode avi header. 'RIFF' chunk is not of 'AVI ' form.\n");
             return false;
         }
 
         // Search for the LIST[hdrl] chunk.
-        for (const chunk_type& child : chunk->children) {
-            if (child.identifier == fourcc("LIST")) {
+        for (const chunk_node_type& child : node->children) {
+            if (child.chunk->identifier == fourcc("LIST")) {
                 if (child.form == fourcc("hdrl")) {
-                    chunk = &child;
+                    node = &child;
                     break;
                 }
             }
         }
 
         // Validate.
-        if ((chunk->identifier != fourcc("LIST")) || (chunk->form != fourcc("hdrl"))) {
+        if ((node->chunk->identifier != fourcc("LIST")) || (node->form != fourcc("hdrl"))) {
             std::fprintf(stderr, "Error: Failed to decode avi header. 'RIFF[AVI ]' chunk does not contain a 'LIST[hdrl]' chunk.\n");
             return false;
         }
 
         // Search for the avih chunk.
-        for (const chunk_type& child : chunk->children) {
-            if (child.identifier == fourcc("avih")) {
-                chunk = &child;
+        for (const chunk_node_type& child : node->children) {
+            if (child.chunk->identifier == fourcc("avih")) {
+                node = &child;
                 break;
             }
         }
 
-        if (chunk->identifier != fourcc("avih")) {
+        if (node->chunk->identifier != fourcc("avih")) {
             std::fprintf(stderr, "Error: Failed to decode avi header. 'RIFF[AVI ]->LIST[hdrl]' chunk does not contain an 'avih' chunk.\n");
             return false;
         }
 
-        if (chunk->length != sizeof(avih_type)) {
+        if (node->chunk->length != sizeof(avih_type)) {
             std::fprintf(stderr, "Error: Failed to decode avi header. 'RIFF[AVI ]->LIST[hdrl]->avih' chunk is not the correct size.\n");
             return false;
         }
 
-        copy_bytes(&chunk->data[0],  &this->avih.microseconds_per_frame, 4);
-        copy_bytes(&chunk->data[4],  &this->avih.max_bytes_per_seccond, 4);
-        copy_bytes(&chunk->data[8],  &this->avih.padding_granularity, 4);
-        copy_bytes(&chunk->data[12], &this->avih.flags, 4);
-        copy_bytes(&chunk->data[16], &this->avih.total_frames, 4);
-        copy_bytes(&chunk->data[20], &this->avih.initial_frames, 4);
-        copy_bytes(&chunk->data[24], &this->avih.stream_count, 4);
-        copy_bytes(&chunk->data[28], &this->avih.suggested_buffer_size, 4);
-        copy_bytes(&chunk->data[32], &this->avih.width, 4);
-        copy_bytes(&chunk->data[36], &this->avih.height, 4);
-        copy_bytes(&chunk->data[40], &this->avih.reserved[0], 4);
-        copy_bytes(&chunk->data[44], &this->avih.reserved[1], 4);
-        copy_bytes(&chunk->data[48], &this->avih.reserved[2], 4);
-        copy_bytes(&chunk->data[52], &this->avih.reserved[3], 4);
+        this->avih = reinterpret_cast<const avih_type*>(&reinterpret_cast<const unsigned char*>(node->chunk)[sizeof(chunk_type)]);
 
         return true;
     }
@@ -345,81 +336,63 @@ private:
         // RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strh
 
         // Start at the root chunk.
-        const chunk_type* chunk = &this->root_chunk;
+        const chunk_node_type* node = &this->root_chunk_node;
 
         // Validate.
-        if (chunk->identifier != fourcc("RIFF")) {
+        if (node->chunk->identifier != fourcc("RIFF")) {
             std::fprintf(stderr, "Error: Failed to decode avi headers. First chunk is not 'RIFF'.\n");
             return false;
         }
-        if (chunk->form != fourcc("AVI ")) {
+        if (node->form != fourcc("AVI ")) {
             std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF' chunk is not of 'AVI ' form.\n");
             return false;
         }
 
         // Search for the LIST[hdrl] chunk.
-        for (const chunk_type& child : chunk->children) {
-            if (child.identifier == fourcc("LIST")) {
+        for (const chunk_node_type& child : node->children) {
+            if (child.chunk->identifier == fourcc("LIST")) {
                 if (child.form == fourcc("hdrl")) {
-                    chunk = &child;
+                    node = &child;
                     break;
                 }
             }
         }
 
         // Validate.
-        if ((chunk->identifier != fourcc("LIST")) || (chunk->form != fourcc("hdrl"))) {
+        if ((node->chunk->identifier != fourcc("LIST")) || (node->form != fourcc("hdrl"))) {
             std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]' chunk does not contain a 'LIST[hdrl]' chunk.\n");
             return false;
         }
 
         // Process all the LIST[strl]->strh chunks.
         bool found_strl = false;
-        for (const chunk_type& child : chunk->children) {
-            if (child.identifier == fourcc("LIST")) {
+        for (const chunk_node_type& child : node->children) {
+            if (child.chunk->identifier == fourcc("LIST")) {
                 if (child.form == fourcc("strl")) {
                     found_strl = true;
 
-                    const chunk_type* chunk_strl = &child;
+                    const chunk_node_type* chunk_strl = &child;
 
                     // Search for the strh chunk.
                     bool found_strh = false;
                     bool found_strf = false;
-                    for (const chunk_type& strl_child : chunk_strl->children) {
-                        if (strl_child.identifier == fourcc("strh")) {
+                    for (const chunk_node_type& strl_child : chunk_strl->children) {
+                        if (strl_child.chunk->identifier == fourcc("strh")) {
                             if (found_strh) {
                                 std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]' chunk contains multiple 'strh' chunks.\n");
                                 return false;
                             }
                             found_strh = true;
 
-                            if (strl_child.length != sizeof(strh_type)) {
+                            if (strl_child.chunk->length != sizeof(strh_type)) {
                                 std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strh' chunk is not the correct size.\n");
                                 return false;
                             }
 
-                            strh_type strh = {};
-                            copy_bytes(&strl_child.data[0],  &strh.type, 4);
-                            copy_bytes(&strl_child.data[4],  &strh.handler, 4);
-                            copy_bytes(&strl_child.data[8],  &strh.flags, 4);
-                            copy_bytes(&strl_child.data[12], &strh.priority, 2);
-                            copy_bytes(&strl_child.data[14], &strh.language, 2);
-                            copy_bytes(&strl_child.data[16], &strh.initial_frames, 4);
-                            copy_bytes(&strl_child.data[20], &strh.scale, 4);
-                            copy_bytes(&strl_child.data[24], &strh.rate, 4);
-                            copy_bytes(&strl_child.data[28], &strh.start, 4);
-                            copy_bytes(&strl_child.data[32], &strh.length, 4);
-                            copy_bytes(&strl_child.data[36], &strh.suggested_buffer_size, 4);
-                            copy_bytes(&strl_child.data[40], &strh.quality, 4);
-                            copy_bytes(&strl_child.data[44], &strh.sample_size, 4);
-                            copy_bytes(&strl_child.data[48], &strh.destination.left, 2);
-                            copy_bytes(&strl_child.data[50], &strh.destination.top, 2);
-                            copy_bytes(&strl_child.data[52], &strh.destination.right, 2);
-                            copy_bytes(&strl_child.data[54], &strh.destination.bottom, 2);
-                            this->strhs.push_back(strh);
+                            this->strhs.push_back(reinterpret_cast<const strh_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]));
                         }
 
-                        if (strl_child.identifier == fourcc("strf")) {
+                        if (strl_child.chunk->identifier == fourcc("strf")) {
                             if (found_strf) {
                                 std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]' chunk contains multiple 'strf' chunks.\n");
                                 return false;
@@ -431,53 +404,35 @@ private:
                                 return false;
                             }
 
-                            if (this->strhs.back().type == fourcc("vids")) {
-                                // Ensure the strf_vids_type is the expected size (40), given that we've added an extradata member into it.
-                                static_assert((sizeof(strf_vids_type) - sizeof(decltype(strf_vids_type::extradata))) == 40);
-
-                                if (strl_child.length < 40) {
+                            if (this->strhs.back()->type == fourcc("vids")) {
+                                if (strl_child.chunk->length < sizeof(strf_vids_type)) {
                                     std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strf' chunk is not the correct size.\n");
                                     return false;
                                 }
 
-                                strf_vids_type strf_vids;
-                                copy_bytes(&strl_child.data[0], &strf_vids.header_size, 4);
-                                copy_bytes(&strl_child.data[4], &strf_vids.width, 4);
-                                copy_bytes(&strl_child.data[8], &strf_vids.height, 4);
-                                copy_bytes(&strl_child.data[12], &strf_vids.planes, 2);
-                                copy_bytes(&strl_child.data[14], &strf_vids.bit_count, 2);
-                                copy_bytes(&strl_child.data[16], &strf_vids.compression_identifier, 4);
-                                copy_bytes(&strl_child.data[20], &strf_vids.image_size, 4);
-                                copy_bytes(&strl_child.data[24], &strf_vids.horizontal_pixels_per_meter, 4);
-                                copy_bytes(&strl_child.data[28], &strf_vids.vertical_pixels_per_meter, 4);
-                                copy_bytes(&strl_child.data[32], &strf_vids.colours_used, 4);
-                                copy_bytes(&strl_child.data[36], &strf_vids.colours_important, 4);
-
-                                unsigned int extradata_size = strl_child.length - 40;
-                                if (extradata_size > 0) {
-                                    strf_vids.extradata.resize(extradata_size);
-                                    copy_bytes(&strl_child.data[40], strf_vids.extradata.data(), extradata_size);
-                                }
-
-                                strf_type strf = {};
+                                strf_type strf;
                                 strf.identifier = fourcc("vids");
-                                strf.strf_vids = strf_vids;
+                                strf.strf_vids = reinterpret_cast<const strf_vids_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]);
                                 this->strfs.push_back(strf);
                             }
-
-                            if (this->strhs.back().type == fourcc("auds")) {
-                                if (strl_child.length != sizeof(strf_auds_type)) {
+                            else if (this->strhs.back()->type == fourcc("auds")) {
+                                if (strl_child.chunk->length != sizeof(strf_auds_type)) {
                                     std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strf' chunk is not the correct size.\n");
                                     return false;
                                 }
-
-                                strf_auds_type strf_auds;
-                                // TODO: Currently ignoring audio chunks.
 
                                 strf_type strf;
                                 strf.identifier = fourcc("auds");
-                                strf.strf_auds = strf_auds;
+                                strf.strf_auds = reinterpret_cast<const strf_auds_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]);
                                 this->strfs.push_back(strf);
+                            }
+                            else {
+                                std::fprintf(stderr, "Warning: Unknown type of stream header %c%c%c%c.\n",
+                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[0],
+                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[1],
+                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[2],
+                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[3]
+                                );
                             }
                         }
                     }
@@ -509,38 +464,38 @@ private:
         // RIFF[AVI ]->idx1
 
         // Start at the root chunk.
-        const chunk_type* chunk = &this->root_chunk;
+        const chunk_node_type* node = &this->root_chunk_node;
 
         // Validate.
-        if (chunk->identifier != fourcc("RIFF")) {
+        if (node->chunk->identifier != fourcc("RIFF")) {
             std::fprintf(stderr, "Error: Failed to decode avi streams. First chunk is not 'RIFF'.\n");
             return false;
         }
-        if (chunk->form != fourcc("AVI ")) {
+        if (node->form != fourcc("AVI ")) {
             std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF' chunk is not of 'AVI ' form.\n");
             return false;
         }
 
         // Search for the LIST[movi] chunk.
-        for (const chunk_type& child : chunk->children) {
-            if (child.identifier == fourcc("LIST")) {
+        for (const chunk_node_type& child : node->children) {
+            if (child.chunk->identifier == fourcc("LIST")) {
                 if (child.form == fourcc("movi")) {
-                    chunk = &child;
+                    node = &child;
                     break;
                 }
             }
         }
 
         // Validate.
-        if ((chunk->identifier != fourcc("LIST")) || (chunk->form != fourcc("movi"))) {
+        if ((node->chunk->identifier != fourcc("LIST")) || (node->form != fourcc("movi"))) {
             std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]' chunk does not contain a 'LIST[movi]' chunk.\n");
             return false;
         }
 
         // Search for the idx1 chunk.
-        const chunk_type* chunk_index = &this->root_chunk;
-        for (const chunk_type& child : chunk_index->children) {
-            if (child.identifier == fourcc("idx1")) {
+        const chunk_node_type* chunk_index = &this->root_chunk_node;
+        for (const chunk_node_type& child : chunk_index->children) {
+            if (child.chunk->identifier == fourcc("idx1")) {
                 chunk_index = &child;
                 break;
             }
@@ -561,10 +516,10 @@ private:
         };
 
         // Allocate the streams in the frames.
-        this->frames.resize(this->avih.stream_count);
+        this->frames.resize(this->avih->stream_count);
 
         // Validate.
-        if (chunk_index->identifier != fourcc("idx1")) {
+        if (chunk_index->chunk->identifier != fourcc("idx1")) {
             // No index found. Just load chunks in the order they come.
 
             // RIFF[AVI ]->LIST[movi]->frame
@@ -578,32 +533,32 @@ private:
             // Where XX starts at zero and is the same order as strh/strf headers are written.
 
             // Process all the LIST[movi] chunks.
-            for (const chunk_type& child : chunk->children) {
-                if (child.identifier == fourcc("LIST")) {
+            for (const chunk_node_type& child : node->children) {
+                if (child.chunk->identifier == fourcc("LIST")) {
                     if (child.form == fourcc("rec ")) {
-                        for (const chunk_type& chunk_frame : child.children) {
-                            int stream_id = hex_to_dec((chunk_frame.identifier >> 8) & 0xFF) + hex_to_dec((chunk_frame.identifier >> 0) & 0xFF) * 16;
-                            if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih.stream_count))) {
+                        for (const chunk_node_type& chunk_frame : child.children) {
+                            int stream_id = hex_to_dec((chunk_frame.chunk->identifier >> 8) & 0xFF) + hex_to_dec((chunk_frame.chunk->identifier >> 0) & 0xFF) * 16;
+                            if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih->stream_count))) {
                                 std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF[AVI ]->LIST[movi]->LIST[rec ]' contains a chunk with an invalid stream number.\n");
                                 return false;
                             }
                             frame_type frame;
-                            frame.data.resize(chunk_frame.length);
-                            copy_bytes(&chunk_frame.data[0], frame.data.data(), chunk_frame.length);
+                            frame.data = &reinterpret_cast<const unsigned char*>(chunk_frame.chunk)[sizeof(chunk_type)];
+                            frame.length = chunk_frame.chunk->length;
                             this->frames[static_cast<size_t>(stream_id)].push_back(frame);
                         }
                     }
                 }
                 else {
-                    const chunk_type& chunk_frame = child;
-                    int stream_id = hex_to_dec((chunk_frame.identifier >> 8) & 0xFF) + hex_to_dec((chunk_frame.identifier >> 0) & 0xFF) * 16;
-                    if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih.stream_count))) {
+                    const chunk_node_type& chunk_frame = child;
+                    int stream_id = hex_to_dec((chunk_frame.chunk->identifier >> 8) & 0xFF) + hex_to_dec((chunk_frame.chunk->identifier >> 0) & 0xFF) * 16;
+                    if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih->stream_count))) {
                         std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF[AVI ]->LIST[movi]' contains a chunk with an invalid stream number.\n");
                         return false;
                     }
                     frame_type frame;
-                    frame.data.resize(chunk_frame.length);
-                    copy_bytes(&chunk_frame.data[0], frame.data.data(), chunk_frame.length);
+                    frame.data = &reinterpret_cast<const unsigned char*>(chunk_frame.chunk)[sizeof(chunk_type)];
+                    frame.length = chunk_frame.chunk->length;
                     this->frames[static_cast<size_t>(stream_id)].push_back(frame);
                 }
             }
@@ -611,50 +566,50 @@ private:
             return true;
         }
 
-        if (chunk_index->length % sizeof(index_type) != 0) {
+        if (chunk_index->chunk->length % sizeof(index_type) != 0) {
             std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF[AVI ]->idx1' chunk is not a valid size.\n");
             return false;
         }
 
-        for (unsigned int i = 0; i < chunk_index->length; i += sizeof(index_type)) {
+        for (unsigned int i = 0; i < chunk_index->chunk->length; i += sizeof(index_type)) {
             index_type index;
-            copy_bytes(&chunk_index->data[i], &index, sizeof(index_type));
+            copy_bytes(&reinterpret_cast<const unsigned char*>(chunk_index->chunk)[sizeof(chunk_type) + i], &index, sizeof(index_type));
 
-            if (index.offset + index.size + 8 > chunk->length) {
+            if (index.offset + index.size + 8 > node->chunk->length) {
                 std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF[AVI ]->idx1' chunk index offset is not a valid size.\n");
                 return false;
             }
 
             // Check if the index is pointing at a rec list.
             if (index.flags & 0x00000001) {
-                chunk_type chunk_list;
-                parse_chunks(&chunk->data[index.offset], index.size + 8, chunk_list);
-                if ((chunk_list.identifier != fourcc("LIST")) || (chunk_list.form != fourcc("rec "))) {
+                chunk_node_type chunk_list;
+                parse_chunks(&reinterpret_cast<const unsigned char*>(node->chunk)[sizeof(chunk_type) + index.offset], index.size + 8, chunk_list);
+                if ((chunk_list.chunk->identifier != fourcc("LIST")) || (chunk_list.form != fourcc("rec "))) {
                     std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF[AVI ]->idx1' chunk index offset does not contain a 'LIST[rec ]' chunk.\n");
                     return false;
                 }
-                for (const chunk_type& chunk_frame : chunk_list.children) {
-                    int stream_id = hex_to_dec((chunk_frame.identifier >> 8) & 0xFF) + hex_to_dec((chunk_frame.identifier >> 0) & 0xFF) * 16;
-                    if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih.stream_count))) {
+                for (const chunk_node_type& chunk_frame : chunk_list.children) {
+                    int stream_id = hex_to_dec((chunk_frame.chunk->identifier >> 8) & 0xFF) + hex_to_dec((chunk_frame.chunk->identifier >> 0) & 0xFF) * 16;
+                    if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih->stream_count))) {
                         std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF[AVI ]->idx1' chunk index offset to 'LIST[rec ]' contains a chunk with an invalid stream number.\n");
                         return false;
                     }
                     frame_type frame;
-                    frame.data.resize(chunk_frame.length);
-                    copy_bytes(&chunk_frame.data[0], frame.data.data(), chunk_frame.length);
+                    frame.data = &reinterpret_cast<const unsigned char*>(chunk_frame.chunk)[sizeof(chunk_type)];
+                    frame.length = chunk_frame.chunk->length;
                     this->frames[static_cast<size_t>(stream_id)].push_back(frame);
                 }
                 return true;
             }
             else {
                 int stream_id = hex_to_dec((index.chunk_id >> 8) & 0xFF) + hex_to_dec((index.chunk_id >> 0) & 0xFF) * 16;
-                if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih.stream_count))) {
+                if ((stream_id < 0) || (stream_id >= static_cast<int>(this->avih->stream_count))) {
                     std::fprintf(stderr, "Error: Failed to decode avi streams. 'RIFF[AVI ]->LIST[movi]' contains a chunk with an invalid stream number.\n");
                     return false;
                 }
                 frame_type frame;
-                frame.data.resize(index.size);
-                copy_bytes(&chunk->data[index.offset + 8], frame.data.data(), index.size);
+                frame.data = &reinterpret_cast<const unsigned char*>(node->chunk)[sizeof(chunk_type) + index.offset + sizeof(chunk_type)];
+                frame.length = index.size;
                 this->frames[static_cast<size_t>(stream_id)].push_back(frame);
             }
         }

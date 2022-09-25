@@ -1,9 +1,12 @@
 #pragma once
 
-#include <array>
-#include <string>
-
 #include "ppm.hpp"
+
+#include <array>
+#include <algorithm>
+#include <cstdio>
+#include <memory>
+#include <string>
 
 static const std::array<std::string, 10> sample_names {
     {
@@ -20,7 +23,7 @@ static const std::array<std::string, 10> sample_names {
     }
 };
 
-static const std::array<size_t, 10> sample_frames {
+static const std::array<std::size_t, 10> sample_frames {
     {
         30,
         2,
@@ -50,14 +53,14 @@ static const std::array<std::array<int, 3>, 10> sample_yuv_rgb_error = {
     }
 };
 
-inline std::unique_ptr<unsigned char[]> load_frame(size_t index_sample, size_t index_frame, size_t& width, size_t& height) {
+inline std::unique_ptr<unsigned char[]> load_frame(std::size_t index_sample, std::size_t index_frame, std::size_t& width, std::size_t& height) {
     std::string frame = std::to_string(index_frame);
     frame = std::string(static_cast<std::string::size_type>(std::max(6ll - static_cast<long long int>(frame.size()), 0ll)), '0') + frame;
     std::string path = "frames/" + sample_names[index_sample] + "/" + frame + ".ppm";
     return ppm_load(path, width, height);
 }
 
-inline std::unique_ptr<unsigned char[]> load_video(size_t index_sample, size_t& length) {
+inline std::unique_ptr<unsigned char[]> load_video(std::size_t index_sample, std::size_t& length) {
     std::string path = "samples/" + sample_names[index_sample];
     std::FILE* handle = std::fopen(path.c_str(), "rb");
     if (!handle) {
@@ -81,10 +84,10 @@ inline std::unique_ptr<unsigned char[]> load_video(size_t index_sample, size_t& 
         std::fclose(handle);
         return nullptr;
     }
-    length = static_cast<size_t>(position_end);
+    length = static_cast<std::size_t>(position_end);
     std::unique_ptr<unsigned char[]> buffer = std::unique_ptr<unsigned char[]>(new unsigned char[length]);
-    size_t file_remaining = length;
-    size_t file_read = file_remaining;
+    std::size_t file_remaining = length;
+    std::size_t file_read = file_remaining;
     while (std::fread(buffer.get() + (length - file_remaining), 1, file_read, handle) && (file_read != 0)) {
         file_remaining -= file_read;
         file_read = file_remaining;
