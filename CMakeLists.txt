@@ -359,6 +359,18 @@ ADD_EXECUTABLE(decode_match_samples
 ADD_TEST(NAME decode_match_samples COMMAND $<TARGET_FILE:decode_match_samples>)
 SET_TESTS_PROPERTIES(decode_match_samples PROPERTIES TIMEOUT 30)
 
+ADD_EXECUTABLE(decode_encode
+    "${CMAKE_SOURCE_DIR}/source/avi.hpp"
+    "${CMAKE_SOURCE_DIR}/source/huffyuv.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/convert.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/ppm.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/samples.hpp"
+    "${CMAKE_SOURCE_DIR}/tests/decode_encode.cpp"
+)
+ADD_TEST(NAME decode_encode COMMAND $<TARGET_FILE:decode_encode>)
+SET_TESTS_PROPERTIES(decode_encode PROPERTIES TIMEOUT 30)
+
+
 ################################################################################
 
 # Print status.
