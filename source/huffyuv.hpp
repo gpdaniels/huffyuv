@@ -841,7 +841,7 @@ public:
             this->predictor = predictor_type::classic;
 
             if (!this->prepare_tables(nullptr, 0)) {
-                std::fprintf(stderr, "Error: Failed to decode tables.\n");
+                std::fprintf(stderr, "Error: Failed to prepare tables.\n");
                 return;
             }
 
@@ -1023,7 +1023,7 @@ public:
             return;
         }
         if (!this->prepare_tables(table_data, table_length)) {
-            std::fprintf(stderr, "Error: Failed to decode tables.\n");
+            std::fprintf(stderr, "Error: Failed to prepare tables.\n");
             return;
         }
         this->valid = true;
@@ -1262,10 +1262,10 @@ private:
             return false;
         }
 
-        // Generate the stream header.
-        // TODO: ...
+        // TODO: Generate the stream header for easy creation of avi files.
+        return false;
 
-        return true;
+        //return true;
     }
 
 public:
@@ -1285,6 +1285,20 @@ public:
             return 0;
         }
         return this->height;
+    }
+
+    bool is_interlaced() const {
+        if (!this->is_valid()) {
+            return false;
+        }
+        return this->interlaced;
+    }
+
+    bool is_decorrelated() const {
+        if (!this->is_valid()) {
+            return false;
+        }
+        return this->decorrelated;
     }
 
     format_type get_image_format() const {
@@ -1353,19 +1367,18 @@ public:
 
         switch (this->format) {
             case format_type::yuyv: {
-                // Note: Data is in Y U Y V order.
+                // Data is in Y U Y V order.
                 const table_type* channel_tables[4] = {
                     &this->tables[0], &this->tables[1], &this->tables[0], &this->tables[2]
                 };
                 if (!decode_hfyu(encoded_data, encoded_length, decoded_data, &channel_tables[0])) {
-                    std::fprintf(stderr, "Error: Failed to decode hfyu data.\n");
                     return false;
                 }
-                // Note: Predictor values start from the second Y.
+                // Predictor values start from the second Y.
                 unsigned char predictor_values[3] = {
                     decoded_data[2], decoded_data[1], decoded_data[3]
                 };
-                // Note: Predictors are in Y U Y V order.
+                // Predictors are in Y U Y V order.
                 unsigned char* predictors[4] = {
                     &predictor_values[0], &predictor_values[1], &predictor_values[0], &predictor_values[2]
                 };
@@ -1387,12 +1400,12 @@ public:
 
             case format_type::bgr:
             case format_type::bgra: {
-                // Note: Data is in B G R (A) order.
+                // Data is in B G R (A) order.
                 const table_type* channel_tables[4] = {
                     &this->tables[0], &this->tables[1], &this->tables[2], &this->tables[2]
                 };
                 if (this->decorrelated) {
-                    // Note: When decorrelated data is in G B-G R-G (A) order, except for the first pixel.
+                    // When decorrelated data is in G B-G R-G (A) order, except for the first pixel.
                     const table_type* temp = channel_tables[0];
                     channel_tables[0] = channel_tables[1];
                     channel_tables[1] = temp;
@@ -1400,22 +1413,22 @@ public:
                 if (!decode_hfyu(encoded_data, encoded_length, decoded_data, &channel_tables[0])) {
                     return false;
                 }
-                // Note: First pixel is in B G R (A) order.
+                // First pixel is in B G R (A) order.
                 unsigned char predictor_values[4] = {
                     decoded_data[0], decoded_data[1], decoded_data[2], decoded_data[3]
                 };
                 if (this->decorrelated) {
-                    // Note: When decorrelated have to subtract G from the other channels.
+                    // When decorrelated have to subtract G from the B and R channels.
                     predictor_values[0] -= predictor_values[1];
                     predictor_values[2] -= predictor_values[1];
                     predictor_values[3] -= predictor_values[1];
                 }
-                // Note: Predictors are in B G R (A) order.
+                // Predictors are in B G R (A) order.
                 unsigned char* predictors[4] = {
                     &predictor_values[0], &predictor_values[1], &predictor_values[2], &predictor_values[3]
                 };
                 if (this->decorrelated) {
-                    // Note: When decorrelated predictors are in G B-G R-G (A) order.
+                    // When decorrelated predictors are in G B-G R-G (A) order.
                     unsigned char* temp = predictors[0];
                     predictors[0] = predictors[1];
                     predictors[1] = temp;
@@ -1464,7 +1477,7 @@ private:
 
     bool decode_hfyu(
         const unsigned char* compressed,
-        size_t compressed_size,
+        unsigned long long int compressed_size,
         unsigned char* decompressed,
         const table_type** channel_tables
     ) const {
@@ -1478,7 +1491,7 @@ private:
                 // Handle the very first pixel separately, it is stored uncompressed.
                 if ((y == 0) && (x == 0)) {
                     // For rgb streams there is still fours bytes for the first pixel so the first byte is dropped.
-                    // Note: This is achieved by using a boolean test cast to int as the first channel index and always interating to 4.
+                    // This is achieved by using a boolean test which when cast to int can skip the first channel index.
                     for (int channel = (this->format == format_type::bgr); channel < 4; ++channel) {
                         *decompressed++ = compressed[channel];
                     }
@@ -1490,7 +1503,7 @@ private:
                     // Calculate the indexes.
                     // block_index: ignoring the bottom five bits (meaning we could be off by up to 31 bits).
                     // fine_index:  just containing this fine offset (offset up to 31 bits).
-                    // Note: The block_index is multiplied by four as we're indexing into an 8bit array rather than a 32bit one.
+                    // The block_index is multiplied by four as we're indexing into an 8 bit array rather than a 32 bit one.
                     const unsigned int block_index = (stream_index >> 5) * 4;
                     const unsigned int fine_index  = (stream_index & 0b00011111);
 
@@ -1515,7 +1528,7 @@ private:
                             static_cast<unsigned long long int>(compressed[block_index + 0 + 0]) << 32 ;
                     }
                     else {
-                        std::fprintf(stderr, "Invalid compressed frame, data needed %lu bytes over. [%d, %d][%d] Offset B: %d F: %d\n", block_index - compressed_size, x, y, channel, block_index, fine_index);
+                        std::fprintf(stderr, "Invalid compressed frame, data needed %llu bytes over.\n", block_index - compressed_size);
                         return false;
                     }
 
@@ -1529,10 +1542,10 @@ private:
                     const int tree_index = find_most_significant_bit_index(code | 1);
 
                     const unsigned char decoded = channel_tables[channel]->pointers[tree_index][((code & ~(1u << tree_index)) >> channel_tables[channel]->pointers[tree_index][0]) + 1];
-                    const unsigned int advance = channel_tables[channel]->shift[decoded];
+                    const unsigned char advance = channel_tables[channel]->shift[decoded];
 
                     if (advance == 0) {
-                        fprintf(stderr, "Invalid compressed frame, failed to advance. [%d, %d][%d]\n", x, y, channel);
+                        fprintf(stderr, "Invalid compressed frame, failed to advance.\n");
                         return false;
                     }
 
@@ -1626,6 +1639,7 @@ private:
 
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
+                // First pixel is not predicted.
                 if ((y == 0) && (x == 0)) {
                     frame += channels;
                     continue;
@@ -1638,7 +1652,7 @@ private:
                     }
                     continue;
                 }
-                // First four pixels of next row are also predict left.
+                // First pixel of next row is also predict left.
                 if ((y == (1 + this->interlaced)) && (x < 2)) {
                     for (int channel = 0; channel < channels; ++channel) {
                         *(predictors[channel]) += *frame;
@@ -1648,12 +1662,12 @@ private:
                 }
                 // Remainder are predicted from the median.
                 for (int channel = 0; channel < channels; ++channel) {
+                    // TODO: Move channel_jump to a lookup table.
                     const int channel_jump = (this->format != format_type::yuyv) ? (channels) : ((channel % 2 == 0) ? (2) : (4));
                     const unsigned char pixel_left = *(frame - channel_jump);
                     const unsigned char pixel_above = *(frame - (width * channels));
                     const unsigned char pixel_above_left = *(frame - (width * channels) - channel_jump);
-                    *frame += median(pixel_left, pixel_above, pixel_left + pixel_above - pixel_above_left);
-                    ++frame;
+                    *frame++ += median(pixel_left, pixel_above, pixel_left + pixel_above - pixel_above_left);
                 }
             }
         }
@@ -1673,8 +1687,8 @@ private:
                     frame += channels;
                     continue;
                 }
-                // Note: The correlated input data is stored in [B, G, R, (A)] order.
-                // Note: The decorreleated output data is stored in [G, B-G, R-G, (A-G)] order.
+                // The correlated input data is stored in [B, G, R, (A)] order.
+                // The decorreleated output data is stored in [G, B-G, R-G, (A)] order.
                 const unsigned char b = frame[0];
                 const unsigned char g = frame[1];
                 const unsigned char r = frame[2];
@@ -1703,8 +1717,8 @@ private:
                     frame += channels;
                     continue;
                 }
-                // Note: The decorreleated input data is stored in [G, B-G, R-G, (A-G)] order.
-                // Note: The correlated output data is stored in [B, G, R, (A)] order.
+                // The decorreleated input data is stored in [G, B-G, R-G, (A)] order.
+                // The correlated output data is stored in [B, G, R, (A)] order.
                 const unsigned char g = frame[0];
                 const unsigned char b_g = frame[1];
                 const unsigned char r_g = frame[2];
