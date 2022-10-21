@@ -1421,7 +1421,6 @@ public:
                     // When decorrelated have to subtract G from the B and R channels.
                     predictor_values[0] -= predictor_values[1];
                     predictor_values[2] -= predictor_values[1];
-                    predictor_values[3] -= predictor_values[1];
                 }
                 // Predictors are in B G R (A) order.
                 unsigned char* predictors[4] = {
@@ -1696,8 +1695,8 @@ private:
                 *frame++ = b - g;
                 *frame++ = r - g;
                 if (channels == 4) {
-                    const unsigned char a = *frame;
-                    *frame++ += a - g;
+                    // Alpha is stored unmodified.
+                    ++frame;
                 }
             }
         }
@@ -1726,8 +1725,8 @@ private:
                 *frame++ = g;
                 *frame++ = r_g + g;
                 if (channels == 4) {
-                    const unsigned char a_g = *frame;
-                    *frame++ += a_g + g;
+                    // Alpha is stored unmodified.
+                    ++frame;
                 }
             }
         }
