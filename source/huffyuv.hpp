@@ -1344,12 +1344,108 @@ public:
         if (!this->is_valid()) {
             return false;
         }
-        // TODO: ...
-        static_cast<void>(decoded_data);
-        static_cast<void>(decoded_length);
-        static_cast<void>(encoded_data);
-        static_cast<void>(encoded_length);
-        return false;
+        if ((encoded_data == nullptr) || (encoded_length < this->get_decoded_image_size()) || (decoded_data == nullptr) || (decoded_length < this->get_decoded_image_size())) {
+            return false;
+        }
+
+        // Initially copy the decoded image so it can be processed in place.
+        unsigned char* buffer_data = new unsigned char[this->get_decoded_image_size()];
+        copy_bytes(decoded_data, buffer_data, this->get_decoded_image_size());
+
+        switch (this->format) {
+            case format_type::yuyv: {
+                // Predictor values start from the second Y.
+                unsigned char predictor_values[3] = {
+                    buffer_data[2], buffer_data[1], buffer_data[3]
+                };
+                // Predictors are in Y U Y V order.
+                unsigned char* predictors[4] = {
+                    &predictor_values[0], &predictor_values[1], &predictor_values[0], &predictor_values[2]
+                };
+                switch (this->predictor) {
+                    case predictor_type::classic:
+                    case predictor_type::left: {
+                        predict_left(buffer_data, &predictors[0]);
+                    } break;
+                    case predictor_type::gradient: {
+                        predict_gradient(buffer_data);
+                        predict_left(buffer_data, &predictors[0]);
+                    } break;
+                    case predictor_type::median: {
+                        predict_median(buffer_data, &predictors[0]);
+                    } break;
+                }
+                // Data is in Y U Y V order.
+                const table_type* channel_tables[4] = {
+                    &this->tables[0], &this->tables[1], &this->tables[0], &this->tables[2]
+                };
+                if (!encode_hfyu(buffer_data, encoded_data, encoded_length, &channel_tables[0])) {
+                    delete[] buffer_data;
+                    return false;
+                }
+            } break;
+
+            case format_type::bgr:
+            case format_type::bgra: {
+                flip(buffer_data);
+                // First pixel is in B G R (A) order.
+                unsigned char predictor_values[4] = {
+                    buffer_data[0], buffer_data[1], buffer_data[2], buffer_data[3]
+                };
+                if (this->decorrelated) {
+                    // When decorrelated have to subtract G from the B and R channels.
+                    predictor_values[0] -= predictor_values[1];
+                    predictor_values[2] -= predictor_values[1];
+                }
+                // Predictors are in B G R (A) order.
+                unsigned char* predictors[4] = {
+                    &predictor_values[0], &predictor_values[1], &predictor_values[2], &predictor_values[3]
+                };
+                if (this->decorrelated) {
+                    // When decorrelated predictors are in G B-G R-G (A) order.
+                    unsigned char* temp = predictors[0];
+                    predictors[0] = predictors[1];
+                    predictors[1] = temp;
+                }
+                switch (this->predictor) {
+                    case predictor_type::classic:
+                    case predictor_type::left: {
+                        if (this->decorrelated) {
+                            decorrelate(buffer_data);
+                        }
+                        predict_left(buffer_data, &predictors[0]);
+                    } break;
+                    case predictor_type::gradient: {
+                        predict_gradient(buffer_data);
+                        if (this->decorrelated) {
+                            decorrelate(buffer_data);
+                        }
+                        predict_left(buffer_data, &predictors[0]);
+                    } break;
+                    case predictor_type::median: {
+                        delete[] buffer_data;
+                        return false;
+                    } break;
+                }
+                // Data is in B G R (A) order.
+                const table_type* channel_tables[4] = {
+                    &this->tables[0], &this->tables[1], &this->tables[2], &this->tables[2]
+                };
+                if (this->decorrelated) {
+                    // When decorrelated data is in G B-G R-G (A) order, except for the first pixel.
+                    const table_type* temp = channel_tables[0];
+                    channel_tables[0] = channel_tables[1];
+                    channel_tables[1] = temp;
+                }
+                if (!encode_hfyu(buffer_data, encoded_data, encoded_length, &channel_tables[0])) {
+                    delete[] buffer_data;
+                    return false;
+                }
+            } break;
+        }
+
+        delete[] buffer_data;
+        return true;
     }
 
     bool decode(
@@ -1463,15 +1559,69 @@ private:
     bool encode_hfyu(
         const unsigned char* decompressed,
         unsigned char* compressed,
-        size_t& compressed_size,
+        unsigned long long int& compressed_size,
         const table_type** channel_tables
     ) const {
-        // TODO: ...
-        static_cast<void>(decompressed);
-        static_cast<void>(compressed);
-        static_cast<void>(compressed_size);
-        static_cast<void>(channel_tables);
-        return false;
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
+
+        unsigned int bit_stream = 0;
+        unsigned int stream_index = 0;
+        unsigned int shift_index = 0;
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                // Handle the very first pixel separately, it is stored uncompressed.
+                if ((y == 0) && (x == 0)) {
+                    // For rgb streams there is still fours bytes for the first pixel so the first byte is cleared.
+                    if (this->format == format_type::bgr) {
+                        *compressed++ = 0;
+                    }
+                    for (int channel = 0; channel < channels; ++channel) {
+                        *compressed++ = *decompressed++;
+                    }
+                    stream_index += 32;
+                    continue;
+                }
+
+                for (int channel = 0; channel < channels; ++channel) {
+                    if ((stream_index + 32) >= static_cast<unsigned int>(height * width * channels * 8)) {
+                        fprintf(stderr, "Failed to encode frame, result would be larger than original.\n");
+                        return false;
+                    }
+
+                    const unsigned char decoded = *decompressed++;
+                    const unsigned char shift = channel_tables[channel]->shift[decoded];
+                    const unsigned int add = channel_tables[channel]->add_shifted[decoded] >> (32 - shift);
+
+                    shift_index += shift;
+                    if (shift_index < 32) {
+                        bit_stream = (bit_stream << shift) | add;
+                        continue;
+                    }
+
+                    shift_index -= 32;
+                    const unsigned char shift_remainder = shift - shift_index;
+                    bit_stream = (bit_stream << shift_remainder) | (add >> shift_index);
+                    *compressed++ = (bit_stream >>  0) & 0xFF;
+                    *compressed++ = (bit_stream >>  8) & 0xFF;
+                    *compressed++ = (bit_stream >> 16) & 0xFF;
+                    *compressed++ = (bit_stream >> 24) & 0xFF;
+                    bit_stream = add;
+                    stream_index += 32;
+                }
+            }
+        }
+        if (shift_index > 0) {
+            bit_stream = bit_stream << (32 - shift_index);
+            *compressed++ = (bit_stream >>  0) & 0xFF;
+            *compressed++ = (bit_stream >>  8) & 0xFF;
+            *compressed++ = (bit_stream >> 16) & 0xFF;
+            *compressed++ = (bit_stream >> 24) & 0xFF;
+            stream_index += 32;
+        }
+        compressed_size = stream_index / 8;
+        return true;
     }
 
     bool decode_hfyu(
@@ -1560,9 +1710,23 @@ private:
         unsigned char* frame,
         unsigned char** predictors
     ) const {
-        // TODO: ...
-        static_cast<void>(frame);
-        static_cast<void>(predictors);
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
+
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                if ((y == 0) && (x == 0)) {
+                    frame += channels;
+                    continue;
+                }
+                for (int channel = 0; channel < channels; ++channel) {
+                    *frame -= *(predictors[channel]);
+                    *(predictors[channel]) += *frame;
+                    ++frame;
+                }
+            }
+        }
     }
 
     void unpredict_left(
@@ -1590,8 +1754,20 @@ private:
     void predict_gradient(
         unsigned char* frame
     ) const {
-        // TODO: ...
-        static_cast<void>(frame);
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
+
+        frame += (channels * width * (height - 1));
+        for (int y = height - 1; y >= (1 + this->interlaced); --y) {
+            for (int x = 0; x < width; ++x) {
+                for (int channel = 0; channel < channels; ++channel) {
+                    *frame -= *(frame - (channels * width * (1 + this->interlaced)));
+                    ++frame;
+                }
+            }
+            frame -= (channels * width * 2);
+        }
     }
 
     void unpredict_gradient(
@@ -1616,9 +1792,81 @@ private:
         unsigned char* frame,
         unsigned char** predictors
     ) const {
-        // TODO: ...
-        static_cast<void>(frame);
-        static_cast<void>(predictors);
+        constexpr static const auto median = [](unsigned char value0, unsigned char value1, unsigned char value2) {
+            if (value0 > value1) { unsigned char temp = value0; value0 = value1; value1 = temp; }
+            if (value1 > value2) { unsigned char temp = value1; value1 = value2; value2 = temp; }
+            if (value0 > value1) { unsigned char temp = value0; value0 = value1; value1 = temp; }
+            return value1;
+        };
+
+        const int width = (this->format == format_type::yuyv) ? (this->width / 2) : this->width;
+        const int height = this->height;
+        const int channels = (this->format == format_type::yuyv) ? 4 : ((this->format == format_type::bgr) ? 3 : 4);
+
+        frame += (channels * width * height - 1);
+        for (int y = height - 1; y >= 0; --y) {
+            for (int x = width - 1; x >= 0; --x) {
+                // First pixel is not predicted.
+                if ((y == 0) && (x == 0)) {
+                    // Handled in forwards loop, so skip in this reverse loop.
+                    frame -= channels;
+                    continue;
+                }
+                // First row(s) is/are predict left.
+                if (y < (1 + this->interlaced)) {
+                    // Handled in forwards loop, so skip in this reverse loop.
+                    frame -= channels;
+                    continue;
+                }
+                // First pixel of next row is also predict left.
+                if ((y == (1 + this->interlaced)) && (x < 2)) {
+                    // Handled in forwards loop, so skip in this reverse loop.
+                    frame -= channels;
+                    continue;
+                }
+                // Remainder are predicted from the median.
+                for (int channel = channels - 1; channel >= 0; --channel) {
+                    // TODO: Move channel_jump to a lookup table.
+                    const int channel_jump = (this->format != format_type::yuyv) ? (channels) : ((channel % 2 == 0) ? (2) : (4));
+                    const unsigned char pixel_left = *(frame - channel_jump);
+                    const unsigned char pixel_above = *(frame - (width * channels));
+                    const unsigned char pixel_above_left = *(frame - (width * channels) - channel_jump);
+                    *frame-- -= median(pixel_left, pixel_above, pixel_left + pixel_above - pixel_above_left);
+                }
+            }
+        }
+
+        // Handle the other types of prediction.
+        ++frame;
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                // First four pixels are not predicted.
+                if ((y == 0) && (x == 0)) {
+                    frame += channels;
+                    continue;
+                }
+                // First row(s) is/are predict left.
+                if (y < (1 + this->interlaced)) {
+                    for (int channel = 0; channel < channels; ++channel) {
+                        *frame -= *(predictors[channel]);
+                        *(predictors[channel]) += *frame;
+                        ++frame;
+                    }
+                    continue;
+                }
+                // First four pixels of next row are also predict left.
+                if ((y == (1 + this->interlaced)) && (x < 2)) {
+                    for (int channel = 0; channel < channels; ++channel) {
+                        *frame -= *(predictors[channel]);
+                        *(predictors[channel]) += *frame;
+                        ++frame;
+                    }
+                    continue;
+                }
+                // Remainder were predicted from the median in the reverse loop.
+                ++frame;
+            }
+        }
     }
 
     void unpredict_median(
