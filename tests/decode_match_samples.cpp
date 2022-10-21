@@ -79,12 +79,15 @@ int main(int argc, char* argv[]) {
 
             unsigned long long int pixels_decoded_length = codec.get_decoded_image_size();
             std::unique_ptr<unsigned char[]> pixels_decoded = std::unique_ptr<unsigned char[]>(new unsigned char[pixels_decoded_length]);
-            codec.decode(
+            if (!codec.decode(
                 video.get_frames()[stream_number][index_frame].data,
                 video.get_frames()[stream_number][index_frame].length,
                 pixels_decoded.get(),
                 pixels_decoded_length
-            );
+            )) {
+                fprintf(stderr, "Failed to decode frame %zu/%zu for sample '%s'.\n", index_frame, sample_frames[index_sample], sample_names[index_sample].c_str());
+                return 1;
+            }
 
             switch (codec.get_image_format()) {
                 case huffyuv::format_type::yuyv: {
