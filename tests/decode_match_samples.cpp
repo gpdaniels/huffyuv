@@ -26,16 +26,15 @@ int main(int argc, char* argv[]) {
 
         // Select stream.
         unsigned int stream_number = 0xFFFFFFFF;
-        for (unsigned int i = 0; i < video.get_strhs().size(); ++i) {
-            const avi::strh_type* strh = video.get_strhs()[i];
+        for (size_t i = 0; i < video.get_streams(); ++i) {
+            const avi::stream_type& stream = video.get_stream(i);
             if (
-                (strh->type == avi::fourcc("vids")) &&
-                ((strh->handler == avi::fourcc("hfyu")) || (strh->handler == avi::fourcc("HFYU")))
+                (stream.strh->type == avi::fourcc("vids")) &&
+                ((stream.strh->handler == avi::fourcc("hfyu")) || (stream.strh->handler == avi::fourcc("HFYU")))
             ) {
-                const avi::strf_type& strf = video.get_strfs()[i];
                 if (
-                    (strf.identifier == avi::fourcc("vids")) &&
-                    (strf.strf_vids->compression_identifier == avi::fourcc("HFYU"))
+                    (stream.strf_vids != nullptr) &&
+                    (stream.strf_vids->compression_identifier == avi::fourcc("HFYU"))
                 ) {
                     stream_number = i;
                     break;
@@ -48,15 +47,15 @@ int main(int argc, char* argv[]) {
         }
 
         // Check the number of frames is the same.
-        if (video.get_frames()[stream_number].size() != sample_frames[index_sample]) {
+        if (video.get_stream(stream_number).frames.size() != sample_frames[index_sample]) {
             fprintf(stderr, "Failed to parse avi of sample '%s', number of frames does not match.\n", sample_names[index_sample].c_str());
             return 1;
         }
 
         // Setup codec.
-        huffyuv codec(reinterpret_cast<const unsigned char*>(video.get_strfs()[stream_number].strf_vids), video.get_strfs()[stream_number].strf_vids->header_size);
+        huffyuv codec(reinterpret_cast<const unsigned char*>(video.get_stream(stream_number).strf_vids), video.get_stream(stream_number).strf_vids->header_size);
         if (!codec.is_valid()) {
-            fprintf(stderr, "Failed setup huffyuv for for sample '%s'.\n", sample_names[index_sample].c_str());
+            fprintf(stderr, "Failed setup huffyuv for sample '%s'.\n", sample_names[index_sample].c_str());
             return 1;
         }
 
@@ -72,7 +71,7 @@ int main(int argc, char* argv[]) {
             // TODO: Problem, can't compare RGBA alpha when using ppm as it doesn't store alpha
             pixels_loaded = rgb_to_rgba(width, height, pixels_loaded.get());
 
-            if ((width != static_cast<size_t>(video.get_strfs()[stream_number].strf_vids->width)) || (height != static_cast<size_t>(video.get_strfs()[stream_number].strf_vids->height))) {
+            if ((width != static_cast<size_t>(video.get_stream(stream_number).strf_vids->width)) || (height != static_cast<size_t>(video.get_stream(stream_number).strf_vids->height))) {
                 fprintf(stderr, "Failed read frame %zu/%zu for sample '%s', frame dimensions do not match.\n", index_frame, sample_frames[index_sample], sample_names[index_sample].c_str());
                 return 1;
             }
@@ -80,8 +79,8 @@ int main(int argc, char* argv[]) {
             unsigned long long int pixels_decoded_length = codec.get_decoded_image_size();
             std::unique_ptr<unsigned char[]> pixels_decoded = std::unique_ptr<unsigned char[]>(new unsigned char[pixels_decoded_length]);
             if (!codec.decode(
-                video.get_frames()[stream_number][index_frame].data,
-                video.get_frames()[stream_number][index_frame].length,
+                video.get_stream(stream_number).frames[index_frame].data,
+                video.get_stream(stream_number).frames[index_frame].length,
                 pixels_decoded.get(),
                 pixels_decoded_length
             )) {

@@ -1022,6 +1022,10 @@ public:
             std::fprintf(stderr, "Error: Invalid settings, BGRA formats cannot use the median predictor.\n");
             return;
         }
+        if ((stream_predictor == predictor_type::classic) && ((table_data != nullptr) || (table_length != 0))) {
+            std::fprintf(stderr, "Error: Invalid settings, the classic predictor must not provide table data.\n");
+            return;
+        }
         if (!this->prepare_tables(table_data, table_length)) {
             std::fprintf(stderr, "Error: Failed to prepare tables.\n");
             return;
@@ -1254,18 +1258,157 @@ private:
         return true;
     }
 
+public:
     bool generate_stream_header(
-        const unsigned char* stream_header_data,
-        unsigned long long int& stream_header_length
+        unsigned char* stream_header_data,
+        unsigned int stream_header_length
     ) {
         if ((stream_header_data == nullptr) || (stream_header_length == 0)) {
             return false;
         }
 
-        // TODO: Generate the stream header for easy creation of avi files.
-        return false;
+        // Minimum required for strf vids header is 40 bytes.
+        if (stream_header_length < 40) {
+            return false;
+        }
 
-        //return true;
+        unsigned int packed_table_size = 0;
+
+        // Validate header size, it must be one of:
+        //   size == 40 and predictor is classic.
+        //   size == 40 + get_packed_table_size() and predictor is NOT classic.
+        //   size == 40 + 4 + get_packed_table_size() and predictor is NOT classic.
+        if (this->predictor == predictor_type::classic) {
+            if (stream_header_length != 40) {
+                return false;
+            }
+        }
+        else {
+            packed_table_size = this->get_packed_table_size();
+            if (
+                (stream_header_length != 40 + packed_table_size) &&
+                (stream_header_length != 40 + 4 + packed_table_size)
+            ) {
+                return false;
+            }
+        }
+
+        unsigned int channels = 0;
+        switch (this->format) {
+            case format_type::yuyv: channels = 2; break;
+            case format_type::bgr:  channels = 3; break;
+            case format_type::bgra: channels = 4; break;
+            default: return false;
+        }
+
+        copy_bytes(&stream_header_length, &stream_header_data[0], 4);
+        copy_bytes(&this->width, &stream_header_data[4], 4);
+        copy_bytes(&this->height, &stream_header_data[8], 4);
+        const unsigned short planes = 1;
+        copy_bytes(&planes, &stream_header_data[12], 2);
+
+        unsigned int packed_table_index = 0;
+
+        unsigned short bit_count = 0;
+        // if size == 40: bit_count = bit count.
+        if (stream_header_length == 40) {
+            bit_count = channels * 8;
+        }
+        // if size == 40 + get_packed_table_size(): bit_count = bit count in upper bits and predictor in lower bits.
+        else if (stream_header_length == 40 + packed_table_size) {
+            unsigned char predictor_code = 0;
+            switch (this->predictor) {
+                case predictor_type::classic:   return false;
+                case predictor_type::left:      predictor_code = 1 + (this->decorrelated == true); break;
+                case predictor_type::gradient:  predictor_code = 3; break;
+                case predictor_type::median:    predictor_code = 4; break;
+                default:                        return false;
+            }
+            bit_count = ((channels * 8) & ~0x0007) | (predictor_code);
+            packed_table_index = 40;
+        }
+        // if size == 40 + 4 + get_packed_table_size(): bit_count = 0.
+        else if (stream_header_length == 40 + 4 + packed_table_size) {
+            bit_count = channels * 8;
+            packed_table_index = 44;
+        }
+        else {
+            return false;
+        }
+        copy_bytes(&bit_count, &stream_header_data[14], 2);
+
+        const char* compression_identifier = "HFYU";
+        copy_bytes(compression_identifier, &stream_header_data[16], 4);
+        const unsigned int image_size = channels * this->width * this->height;
+        copy_bytes(&image_size, &stream_header_data[20], 4);
+        const int horizontal_pixels_per_meter = 0;
+        copy_bytes(&horizontal_pixels_per_meter, &stream_header_data[24], 4);
+        const int vertical_pixels_per_meter = 0;
+        copy_bytes(&vertical_pixels_per_meter, &stream_header_data[28], 4);
+        const unsigned int colours_used = 0;
+        copy_bytes(&colours_used, &stream_header_data[32], 4);
+        const unsigned int colours_important = 0;
+        copy_bytes(&colours_important, &stream_header_data[36], 4);
+
+        // No tables or extradata in header.
+        if (stream_header_length == 40) {
+            return true;
+        }
+
+        // Tables and extradata in header
+        if (stream_header_length == 40 + 4 + packed_table_size) {
+            unsigned char method = 0;
+            switch (this->predictor) {
+                case predictor_type::classic:   return false;
+                case predictor_type::left:      method = 0; break;
+                case predictor_type::gradient:  method = 1; break;
+                case predictor_type::median:    method = 2; break;
+                default:                        return false;
+            }
+            if (this->decorrelated) {
+                method |= 0x40;
+            }
+            copy_bytes(&method, &stream_header_data[40], 1);
+            const unsigned char real_bit_count = channels * 8;
+            copy_bytes(&real_bit_count, &stream_header_data[41], 1);
+            const unsigned char interlaced = this->interlaced;
+            copy_bytes(&interlaced, &stream_header_data[42], 1);
+            const unsigned char unused = 0;
+            copy_bytes(&unused, &stream_header_data[43], 1);
+        }
+
+        // Runlength compress table data of bit lengths per code.
+        // Stored in these orders:
+        //  - YUV: Y table, U table, V table
+        //  - RGB (correlated): B table, G table, R table
+        //  - RGB (decorrelated): B-G table, G table, R-G table
+        // Note: For RGBA data the R or R-G table is used for the alpha channel.
+        {
+            unsigned int data_index = packed_table_index;
+            for (int channel_index = 0; channel_index < 3; ++channel_index) {
+                for (int table_index = 0; table_index < 256;) {
+                    const unsigned char value = this->tables[channel_index].shift[table_index];
+                    const int start_index = table_index;
+                    for (++table_index; table_index < 256 - 1; ++table_index) {
+                        if (value != this->tables[channel_index].shift[table_index]) {
+                            break;
+                        }
+                    }
+                    const unsigned char repetitions = table_index - start_index;
+                    if (repetitions < 8) {
+                        stream_header_data[data_index++] = (repetitions << 5) | (value & 0x1F);
+                    }
+                    else {
+                        stream_header_data[data_index++] = (value & 0x1F);
+                        stream_header_data[data_index++] = repetitions;
+                    }
+                }
+            }
+            // Should be at least one null byte at the end.
+            stream_header_data[data_index++] = 0;
+        }
+
+        return true;
     }
 
 public:
@@ -1332,6 +1475,29 @@ public:
             } break;
         }
         return this->height * this->width * channel_bytes;
+    }
+
+    unsigned int get_packed_table_size() const {
+        if (!this->is_valid()) {
+            return 0;
+        }
+        unsigned int packed_table_size = 0;
+        for (int channel_index = 0; channel_index < 3; ++channel_index) {
+            for (int table_index = 0; table_index < 256;) {
+                const unsigned char value = this->tables[channel_index].shift[table_index];
+                const int start_index = table_index;
+                for (++table_index; table_index < 256 - 1; ++table_index) {
+                    if (value != this->tables[channel_index].shift[table_index]) {
+                        break;
+                    }
+                }
+                const unsigned char repetitions = table_index - start_index;
+                packed_table_size += 1 + (repetitions >= 8);
+            }
+        }
+        // Should be at least one null byte at the end.
+        ++packed_table_size;
+        return packed_table_size;
     }
 
 public:

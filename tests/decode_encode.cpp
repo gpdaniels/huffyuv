@@ -26,16 +26,15 @@ int main(int argc, char* argv[]) {
 
         // Select stream.
         unsigned int stream_number = 0xFFFFFFFF;
-        for (unsigned int i = 0; i < video.get_strhs().size(); ++i) {
-            const avi::strh_type* strh = video.get_strhs()[i];
+        for (size_t i = 0; i < video.get_streams(); ++i) {
+            const avi::stream_type& stream = video.get_stream(i);
             if (
-                (strh->type == avi::fourcc("vids")) &&
-                ((strh->handler == avi::fourcc("hfyu")) || (strh->handler == avi::fourcc("HFYU")))
+                (stream.strh->type == avi::fourcc("vids")) &&
+                ((stream.strh->handler == avi::fourcc("hfyu")) || (stream.strh->handler == avi::fourcc("HFYU")))
             ) {
-                const avi::strf_type& strf = video.get_strfs()[i];
                 if (
-                    (strf.identifier == avi::fourcc("vids")) &&
-                    (strf.strf_vids->compression_identifier == avi::fourcc("HFYU"))
+                    (stream.strf_vids != nullptr) &&
+                    (stream.strf_vids->compression_identifier == avi::fourcc("HFYU"))
                 ) {
                     stream_number = i;
                     break;
@@ -48,15 +47,15 @@ int main(int argc, char* argv[]) {
         }
 
         // Check the number of frames is the same.
-        if (video.get_frames()[stream_number].size() != sample_frames[index_sample]) {
+        if (video.get_stream(stream_number).frames.size() != sample_frames[index_sample]) {
             fprintf(stderr, "Failed to parse avi of sample '%s', number of frames does not match.\n", sample_names[index_sample].c_str());
             return 1;
         }
 
         // Setup decode codec.
-        huffyuv codec_decode(reinterpret_cast<const unsigned char*>(video.get_strfs()[stream_number].strf_vids), video.get_strfs()[stream_number].strf_vids->header_size);
+        huffyuv codec_decode(reinterpret_cast<const unsigned char*>(video.get_stream(stream_number).strf_vids), video.get_stream(stream_number).strf_vids->header_size);
         if (!codec_decode.is_valid()) {
-            fprintf(stderr, "Failed setup huffyuv decoder for for sample '%s'.\n", sample_names[index_sample].c_str());
+            fprintf(stderr, "Failed setup huffyuv decoder for sample '%s'.\n", sample_names[index_sample].c_str());
             return 1;
         }
 
@@ -70,7 +69,7 @@ int main(int argc, char* argv[]) {
             codec_decode.get_image_predictor()
         );
         if (!codec_encode.is_valid()) {
-            fprintf(stderr, "Failed setup huffyuv encoder for for sample '%s'.\n", sample_names[index_sample].c_str());
+            fprintf(stderr, "Failed setup huffyuv encoder for sample '%s'.\n", sample_names[index_sample].c_str());
             return 1;
         }
 
@@ -80,8 +79,8 @@ int main(int argc, char* argv[]) {
             unsigned long long int pixels_decoded_length = codec_decode.get_decoded_image_size();
             std::unique_ptr<unsigned char[]> pixels_decoded = std::unique_ptr<unsigned char[]>(new unsigned char[pixels_decoded_length]);
             if (!codec_decode.decode(
-                video.get_frames()[stream_number][index_frame].data,
-                video.get_frames()[stream_number][index_frame].length,
+                video.get_stream(stream_number).frames[index_frame].data,
+                video.get_stream(stream_number).frames[index_frame].length,
                 pixels_decoded.get(),
                 pixels_decoded_length
             )) {
@@ -101,13 +100,13 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
 
-            if (pixels_encoded_length != video.get_frames()[stream_number][index_frame].length) {
+            if (pixels_encoded_length != video.get_stream(stream_number).frames[index_frame].length) {
                 fprintf(stderr, "Failed to match size of encoded frame %zu for sample '%s'.\n", index_frame, sample_names[index_sample].c_str());
                 return 1;
             }
 
             for (size_t index_byte = 0; index_byte < pixels_encoded_length; ++index_byte) {
-                if (pixels_encoded.get()[index_byte] != video.get_frames()[stream_number][index_frame].data[index_byte]) {
+                if (pixels_encoded.get()[index_byte] != video.get_stream(stream_number).frames[index_frame].data[index_byte]) {
                     fprintf(stderr, "Failed to match frame %zu for sample '%s' at byte %zu.\n", index_frame, sample_names[index_sample].c_str(), index_byte);
                     return 1;
                 }

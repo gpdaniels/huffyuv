@@ -101,9 +101,9 @@ public:
         // Height of image in pixels, for uncompressed images positive values mean bottom up and negative top down.
         int height;
         // The number of planes for the target device, should be 1.
-        unsigned short  planes;
+        unsigned short planes;
         // Number of bits per pixel.
-        unsigned short  bit_count;
+        unsigned short bit_count;
         // Flag or Four letter character code identifying the compression used.
         // 0x00000000 - Uncompressed RGB
         // 0x00000003 - Uncompressed RGB with color masks.
@@ -126,14 +126,6 @@ public:
         // TODO: Currently ignoring audio chunks.
     };
     static_assert(sizeof(strf_auds_type) == 1);
-
-    struct strf_type {
-        unsigned int identifier;
-        union {
-            const strf_vids_type* strf_vids;
-            const strf_auds_type* strf_auds;
-        };
-    };
 
 private:
     struct index_type {
@@ -161,18 +153,22 @@ private:
         std::vector<chunk_node_type> children;
     };
 
+public:
+    struct stream_type {
+        const strh_type* strh;
+        const strf_vids_type* strf_vids;
+        const strf_auds_type* strf_auds;
+        std::vector<frame_type> frames;
+    };
+
 private:
     chunk_node_type root_chunk_node;
     const avih_type* avih;
-    std::vector<const strh_type*> strhs;
-    std::vector<strf_type> strfs;
-    std::vector<std::vector<frame_type>> frames;
+    std::vector<stream_type> streams;
 
 public:
     bool parse(const unsigned char* data, unsigned long long int length) {
-        this->strhs.clear();
-        this->strfs.clear();
-        this->frames.clear();
+        this->streams.clear();
 
         if (!parse_chunks(&data[0], length, this->root_chunk_node)) {
             std::fprintf(stderr, "Error: Failed to parse root chunk.\n");
@@ -197,7 +193,7 @@ public:
             return false;
         }
 
-        if ((this->avih->stream_count != this->strhs.size()) || (this->avih->stream_count != this->strfs.size())) {
+        if (this->avih->stream_count != this->streams.size()) {
             std::fprintf(stderr, "Error: Incorrect number of streams found in file.\n");
             return false;
         }
@@ -209,21 +205,152 @@ public:
         return true;
     }
 
+    bool compose(
+        const avih_type* avih,
+        const std::vector<stream_type>& streams,
+        std::vector<unsigned char>& video
+    ) {
+        constexpr static const auto dec_to_hex = [](int decimal, char* characters){
+            constexpr const char* hex_characters = "0123456789ABCDEF";
+            characters[0] = hex_characters[(decimal >> 4) & 0xF];
+            characters[1] = hex_characters[(decimal >> 0) & 0xF];
+        };
+
+        video.clear();
+
+        unsigned long long int index = 0;
+        {
+            unsigned int riff_size =
+                4 +                                                     // CHUNK: RIFF FORM
+                4 + 4 +                                                 // CHUNK: LIST[hdrl]
+                4 +                                                     // CHUNK: LIST[hdrl] FORM
+                4 + 4 +                                                 // CHUNK: avih
+                sizeof(avih_type) +                                     // DATA:  avih_type
+                4 + 4 +                                                 // CHUNK: LIST[strl]
+                4;                                                      // CHUNK: LIST[strl] FORM
+            for (size_t stream = 0; stream < streams.size(); ++stream) {
+                riff_size +=
+                    4 + 4 +                                             // CHUNK: strh
+                    sizeof(strh_type) +                                 // DATA:  strh_type
+                    4 + 4 +                                             // CHUNK: strf_vids
+                    streams[stream].strf_vids->header_size +            // DATA:  strf_vids_type
+                    streams[stream].strf_vids->header_size % 2;         // ALIGNMENT
+            }
+            riff_size +=
+                4 + 4 +                                                 // CHUNK: movi
+                4;                                                      // CHUNK: movi FORM
+            for (size_t stream = 0; stream < streams.size(); ++stream) {
+                for (size_t frame = 0; frame < streams[stream].frames.size(); ++frame) {
+                    riff_size +=
+                        4 + 4 +                                         // CHUNK: XXdc
+                        streams[stream].frames[frame].length +          // DATA:  frame
+                        streams[stream].frames[frame].length % 2;       // ALIGNMENT
+                }
+            }
+            video.resize(8 + riff_size);
+            copy_bytes("RIFF", &video[index], 4); index += 4;
+            copy_bytes(&riff_size, &video[index], 4); index += 4;
+            copy_bytes("AVI ", &video[index], 4); index += 4;
+
+            {
+                unsigned int hdrl_size =
+                    4 +                                                 // CHUNK: LIST[hdrl] FORM
+                    4 + 4 +                                             // CHUNK: avih
+                    sizeof(avih_type) +                                 // DATA:  avih_type
+                    4 + 4 +                                             // CHUNK: LIST[strl]
+                    4;                                                  // CHUNK: LIST[strl] FORM
+                for (size_t stream = 0; stream < streams.size(); ++stream) {
+                    hdrl_size +=
+                        4 + 4 +                                         // CHUNK: strh
+                        sizeof(strh_type) +                             // DATA:  strh_type
+                        4 + 4 +                                         // CHUNK: strf_vids
+                        streams[stream].strf_vids->header_size +        // DATA:  strf_vids_type
+                        streams[stream].strf_vids->header_size % 2;     // ALIGNMENT
+                }
+                copy_bytes("LIST", &video[index], 4); index += 4;
+                copy_bytes(&hdrl_size, &video[index], 4); index += 4;
+                copy_bytes("hdrl", &video[index], 4); index += 4;
+
+                {
+                    const unsigned int avih_size = sizeof(avih_type);
+                    copy_bytes("avih", &video[index], 4); index += 4;
+                    copy_bytes(&avih_size, &video[index], 4); index += 4;
+                    copy_bytes(avih, &video[index], avih_size); index += avih_size;
+
+                    unsigned int strl_size = 4;                         // CHUNK: LIST[strl] FORM
+                    for (size_t stream = 0; stream < streams.size(); ++stream) {
+                        strl_size +=
+                            4 + 4 +                                     // CHUNK: strh
+                            sizeof(strh_type) +                         // DATA:  strh_type
+                            4 + 4 +                                     // CHUNK: strf_vids
+                            streams[stream].strf_vids->header_size +    // DATA:  strf_vids_type
+                            streams[stream].strf_vids->header_size % 2; // ALIGNMENT
+                    }
+                    copy_bytes("LIST", &video[index], 4); index += 4;
+                    copy_bytes(&strl_size, &video[index], 4); index += 4;
+                    copy_bytes("strl", &video[index], 4); index += 4;
+
+
+                    for (size_t stream = 0; stream < streams.size(); ++stream) {
+                        const strh_type* strh = streams[stream].strh;
+                        const unsigned int strh_size = sizeof(strh_type);
+                        copy_bytes("strh", &video[index], 4); index += 4;
+                        copy_bytes(&strh_size, &video[index], 4); index += 4;
+                        copy_bytes(strh, &video[index], strh_size); index += strh_size;
+
+                        const strf_vids_type* strf_vids = streams[stream].strf_vids;
+                        const unsigned int strf_vids_size = strf_vids->header_size;
+                        copy_bytes("strf", &video[index], 4); index += 4;
+                        copy_bytes(&strf_vids_size, &video[index], 4); index += 4;
+                        copy_bytes(strf_vids, &video[index], strf_vids_size); index += strf_vids_size + (strf_vids_size % 2);
+                    }
+                }
+            }
+
+            {
+                unsigned int movi_size = 4;                             // CHUNK: movi FORM
+                for (size_t stream = 0; stream < streams.size(); ++stream) {
+                    for (size_t frame = 0; frame < streams[stream].frames.size(); ++frame) {
+                        movi_size +=
+                            4 + 4 +                                     // CHUNK: XXdc
+                            streams[stream].frames[frame].length +      // DATA:  frame
+                            streams[stream].frames[frame].length % 2;   // ALIGNMENT
+                    }
+                }
+                copy_bytes("LIST", &video[index], 4); index += 4;
+                copy_bytes(&movi_size, &video[index], 4); index += 4;
+                copy_bytes("movi", &video[index], 4); index += 4;
+
+                for (size_t stream = 0; stream < streams.size(); ++stream) {
+                    for (size_t frame = 0; frame < streams[stream].frames.size(); ++frame) {
+                        char stream_id[4] = {'0', '0', 'd', 'c'};
+                        dec_to_hex(stream, stream_id);
+                        copy_bytes(stream_id, &video[index], 4); index += 4;
+                        copy_bytes(&streams[stream].frames[frame].length, &video[index], 4); index += 4;
+                        copy_bytes(streams[stream].frames[frame].data, &video[index], streams[stream].frames[frame].length); index += streams[stream].frames[frame].length + (streams[stream].frames[frame].length % 2);
+                    }
+                }
+            }
+        }
+
+        return (video.size() == index);
+    }
+
 public:
     const avih_type* get_avih() const {
         return this->avih;
     }
 
-    const std::vector<const strh_type*>& get_strhs() const {
-        return this->strhs;
+    size_t get_streams() const {
+        return this->streams.size();
     }
 
-    const std::vector<strf_type>& get_strfs() const {
-        return this->strfs;
+    const stream_type& get_stream(size_t stream_index) const {
+        return this->streams[stream_index];
     }
 
-    const std::vector<std::vector<frame_type>>& get_frames() const {
-        return this->frames;
+    const std::vector<frame_type>& get_frames(size_t stream_index) const {
+        return this->streams[stream_index].frames;
     }
 
 public:
@@ -372,6 +499,10 @@ private:
                     found_strl = true;
 
                     const chunk_node_type* chunk_strl = &child;
+                    std::vector<const strh_type*> strhs;
+                    std::vector<const void*> strfs;
+                    std::vector<const strf_auds_type*> strf_audss;
+                    std::vector<const strf_vids_type*> strf_vidss;
 
                     // Search for the strh chunk.
                     bool found_strh = false;
@@ -389,7 +520,7 @@ private:
                                 return false;
                             }
 
-                            this->strhs.push_back(reinterpret_cast<const strh_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]));
+                            strhs.push_back(reinterpret_cast<const strh_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]));
                         }
 
                         if (strl_child.chunk->identifier == fourcc("strf")) {
@@ -399,39 +530,35 @@ private:
                             }
                             found_strf = true;
 
-                            if (this->strhs.size() != this->strfs.size() + 1) {
+                            if (strhs.size() != strfs.size() + 1) {
                                 std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strf' chunk appeared before 'strh' chunk.\n");
                                 return false;
                             }
 
-                            if (this->strhs.back()->type == fourcc("vids")) {
+                            if (strhs.back()->type == fourcc("vids")) {
                                 if (strl_child.chunk->length < sizeof(strf_vids_type)) {
                                     std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strf' chunk is not the correct size.\n");
                                     return false;
                                 }
 
-                                strf_type strf;
-                                strf.identifier = fourcc("vids");
-                                strf.strf_vids = reinterpret_cast<const strf_vids_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]);
-                                this->strfs.push_back(strf);
+                                strfs.push_back(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]);
+                                strf_vidss.push_back(reinterpret_cast<const strf_vids_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]));
                             }
-                            else if (this->strhs.back()->type == fourcc("auds")) {
+                            else if (strhs.back()->type == fourcc("auds")) {
                                 if (strl_child.chunk->length != sizeof(strf_auds_type)) {
                                     std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]->strf' chunk is not the correct size.\n");
                                     return false;
                                 }
 
-                                strf_type strf;
-                                strf.identifier = fourcc("auds");
-                                strf.strf_auds = reinterpret_cast<const strf_auds_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]);
-                                this->strfs.push_back(strf);
+                                strfs.push_back(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]);
+                                strf_audss.push_back(reinterpret_cast<const strf_auds_type*>(&reinterpret_cast<const unsigned char*>(strl_child.chunk)[sizeof(chunk_type)]));
                             }
                             else {
                                 std::fprintf(stderr, "Warning: Unknown type of stream header %c%c%c%c.\n",
-                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[0],
-                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[1],
-                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[2],
-                                    reinterpret_cast<const unsigned char*>(&this->strhs.back()->type)[3]
+                                    reinterpret_cast<const unsigned char*>(&strhs.back()->type)[0],
+                                    reinterpret_cast<const unsigned char*>(&strhs.back()->type)[1],
+                                    reinterpret_cast<const unsigned char*>(&strhs.back()->type)[2],
+                                    reinterpret_cast<const unsigned char*>(&strhs.back()->type)[3]
                                 );
                             }
                         }
@@ -446,6 +573,15 @@ private:
                     if (!found_strf) {
                         std::fprintf(stderr, "Error: Failed to decode avi headers. 'RIFF[AVI ]->LIST[hdrl]->LIST[strl]' chunk does not contain a 'strf' chunk.\n");
                         return false;
+                    }
+
+                    this->streams.push_back({});
+                    this->streams.back().strh = strhs.back();
+                    if (!strf_vidss.empty()) {
+                        this->streams.back().strf_vids = strf_vidss.back();
+                    }
+                    if (!strf_audss.empty()) {
+                        this->streams.back().strf_auds = strf_audss.back();
                     }
                 }
             }
@@ -515,9 +651,6 @@ private:
             return -1;
         };
 
-        // Allocate the streams in the frames.
-        this->frames.resize(this->avih->stream_count);
-
         // Validate.
         if (chunk_index->chunk->identifier != fourcc("idx1")) {
             // No index found. Just load chunks in the order they come.
@@ -545,7 +678,7 @@ private:
                             frame_type frame;
                             frame.data = &reinterpret_cast<const unsigned char*>(chunk_frame.chunk)[sizeof(chunk_type)];
                             frame.length = chunk_frame.chunk->length;
-                            this->frames[static_cast<size_t>(stream_id)].push_back(frame);
+                            this->streams[static_cast<size_t>(stream_id)].frames.push_back(frame);
                         }
                     }
                 }
@@ -559,7 +692,7 @@ private:
                     frame_type frame;
                     frame.data = &reinterpret_cast<const unsigned char*>(chunk_frame.chunk)[sizeof(chunk_type)];
                     frame.length = chunk_frame.chunk->length;
-                    this->frames[static_cast<size_t>(stream_id)].push_back(frame);
+                    this->streams[static_cast<size_t>(stream_id)].frames.push_back(frame);
                 }
             }
 
@@ -597,7 +730,7 @@ private:
                     frame_type frame;
                     frame.data = &reinterpret_cast<const unsigned char*>(chunk_frame.chunk)[sizeof(chunk_type)];
                     frame.length = chunk_frame.chunk->length;
-                    this->frames[static_cast<size_t>(stream_id)].push_back(frame);
+                    this->streams[static_cast<size_t>(stream_id)].frames.push_back(frame);
                 }
                 return true;
             }
@@ -610,7 +743,7 @@ private:
                 frame_type frame;
                 frame.data = &reinterpret_cast<const unsigned char*>(node->chunk)[sizeof(chunk_type) + index.offset + sizeof(chunk_type)];
                 frame.length = index.size;
-                this->frames[static_cast<size_t>(stream_id)].push_back(frame);
+                this->streams[static_cast<size_t>(stream_id)].frames.push_back(frame);
             }
         }
 
