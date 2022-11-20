@@ -809,6 +809,11 @@ public:
             std::fprintf(stderr, "Error: Invalid stream dimensions.\n");
             return;
         }
+        
+        if ((this->width % 4) != 0) {
+            std::fprintf(stderr, "Error: Invalid stream dimensions, width must be divisible by four.\n");
+            return;
+        }
 
         this->interlaced = (this->height > huffyuv::interlaced_threshold);
         this->decorrelated = false;
@@ -1000,6 +1005,10 @@ public:
     {
         if ((this->width <= 0) || (this->height <= 0)) {
             std::fprintf(stderr, "Error: Invalid dimensions.\n");
+            return;
+        }
+        if ((this->width % 4) != 0) {
+            std::fprintf(stderr, "Error: Invalid dimensions, width must be divisible by four.\n");
             return;
         }
         if ((stream_format == format_type::yuyv) && (stream_decorrelated)) {
