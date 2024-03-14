@@ -6,16 +6,19 @@
 class avi final {
 private:
     // The files are comprised of a collection of chunks.
+    #pragma pack(1)
     struct chunk_type {
         // Four letter character code identifying the chunk type.
         unsigned int identifier;
         // Length of the chunk's data.
         unsigned int length;
     };
+    #pragma pack()
     static_assert(sizeof(chunk_type) == 8);
 
 public:
     // The main avi header.
+    #pragma pack(1)
     struct avih_type final {
         // Contains the duration of one video frame in microseconds.
         unsigned int microseconds_per_frame;
@@ -46,9 +49,11 @@ public:
         // Reserved.
         unsigned int reserved[4];
     };
+    #pragma pack()
     static_assert(sizeof(avih_type) == 56);
 
     // A stream header.
+    #pragma pack(1)
     struct strh_type {
         // Four letter character code identifying the stream type, can be 'vids', 'auds', 'mids' or 'txts' for video, audio and subtitles.
         unsigned int type;
@@ -86,6 +91,7 @@ public:
             short int bottom;
         } destination;
     };
+    #pragma pack()
     static_assert(sizeof(strh_type) == 56);
 
     // Stream formats are different for each stream type:
@@ -93,6 +99,7 @@ public:
     // - WAVEFORMATEX or PCMWAVEFORMAT for audio streams.
     // - Nothing for text streams.
     // - Nothing for midi streams.
+    #pragma pack(1)
     struct strf_vids_type {
         // Size of this BITMAPINFOHEADER and any additional data following it in bytes.
         unsigned int header_size;
@@ -120,14 +127,18 @@ public:
         // The number of colour indices in the colour table that are important for displaying the image.
         unsigned int colours_important;
     };
+    #pragma pack()
     static_assert(sizeof(strf_vids_type) == 40);
 
+    #pragma pack(1)
     struct strf_auds_type {
         // TODO: Currently ignoring audio chunks.
     };
+    #pragma pack()
     static_assert(sizeof(strf_auds_type) == 1);
 
 private:
+    #pragma pack(1)
     struct index_type {
         unsigned int chunk_id;
         // Flags:
@@ -138,6 +149,7 @@ private:
         unsigned int offset;
         unsigned int size;
     };
+    #pragma pack()
     static_assert(sizeof(index_type) == 16);
 
 public:
