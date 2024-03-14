@@ -66,8 +66,8 @@ int main(int argc, char* argv[]) {
         strh.destination.bottom = video_height;
 
         const unsigned int strf_vids_size = sizeof(avi::strf_vids_type) + 4 + codec_encode.get_packed_table_size();
-        std::unique_ptr<avi::strf_vids_type> strf_vids = std::unique_ptr<avi::strf_vids_type>(reinterpret_cast<avi::strf_vids_type*>(new unsigned char[strf_vids_size]));
-        if (!codec_encode.generate_stream_header(reinterpret_cast<unsigned char*>(strf_vids.get()), strf_vids_size)) {
+        std::unique_ptr<unsigned char[]> strf_vids_data = std::unique_ptr<unsigned char[]>(new unsigned char[strf_vids_size]);
+        if (!codec_encode.generate_stream_header(strf_vids_data.get(), strf_vids_size)) {
             fprintf(stderr, "Failed to generate avi stream header for sample '%s'.\n", sample_names[index_sample].c_str());
             return 1;
         }
@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
 
         streams.push_back({});
         streams.back().strh = &strh;
-        streams.back().strf_vids = strf_vids.get();
+        streams.back().strf_vids = reinterpret_cast<avi::strf_vids_type*>(strf_vids_data.get());
 
         // Add all the ffmpeg decoded frames.
         for (size_t index_frame = 0; index_frame < sample_frames[index_sample]; ++index_frame) {
