@@ -1176,12 +1176,12 @@ private:
                 }
                 // Should be at least one null byte at the end.
                 if (data_index == table_length) {
-                    std::fprintf(stderr, "Error: Invalid table in stream header, missing null byte.\n");
-                    return false;
+                    std::fprintf(stderr, "Warning: Invalid table in stream header, missing null byte.\n");
+                    //return false;
                 }
-                if (table_data[data_index] != 0x00) {
-                    std::fprintf(stderr, "Error: Invalid table in stream header, invalid null byte.\n");
-                    return false;
+                else if (table_data[data_index] != 0x00) {
+                    std::fprintf(stderr, "Warning: Invalid table in stream header, invalid null byte.\n");
+                    //return false;
                 }
             }
 
