@@ -73,6 +73,11 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // To support custom tables they'd need to be copied from the input to the output encoders.
+        // codec_encode.tables[0] = codec_decode.tables[0];
+        // codec_encode.tables[1] = codec_decode.tables[1];
+        // codec_encode.tables[2] = codec_decode.tables[2];
+
         // Check that all the ffmpeg decoded frames match.
         for (size_t index_frame = 0; index_frame < sample_frames[index_sample]; ++index_frame) {
 
